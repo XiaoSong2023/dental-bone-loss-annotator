@@ -5,7 +5,7 @@
 
 当前 1.3 版合并为一个入口，启动空白抓手；“自动分割牙齿”和“自动标注”分别点击执行。
 保留原有四点/四公式与逐牙标注，导出仅含当前标注点和计算结果，不含牙框坐标。
-使用 `dist/AI-integrated/牙槽骨吸收测量_安装包_v1.3.0-preview.exe`；
+使用 `dist/AI-integrated/牙槽骨吸收测量_安装包_v1.3.1-preview.exe`；
 完整操作见 [使用说明](packaging/distribution/使用说明.md)，开发交接见 STATUS.md、HANDOFF.md。
 自动候选的轮廓投影是几何校正，尚未验证解剖准确率；缺点需要人工补标。
 

@@ -1,7 +1,7 @@
 [
   {
     "path": "manual-app/README.md",
-    "sha256": "330213ee20899e0885fbd779fe400bdb9820e8f165e4762e81d1ec25e33c320c"
+    "sha256": "6f23c8be34faa6bb2889b1a8c19121e9f5c64aaa3dc81dd74a2715976ea6cb5a"
   },
   {
     "path": "manual-app/app/__init__.py",
@@ -93,7 +93,7 @@
   },
   {
     "path": "manual-app/app/ui/main_window.py",
-    "sha256": "81a59687d1a842761c5183d5ade256fc5c0db0b7194c09c23041becc108c909a"
+    "sha256": "933cfeda363008dbd6e0608821753a613426e3a482e587d9a6d80512eff954e7"
   },
   {
     "path": "manual-app/app/ui/panorama_view.py",
@@ -129,7 +129,7 @@
   },
   {
     "path": "manual-app/installer_ai.iss",
-    "sha256": "6ffdb3a0c36284282be160eeb4c2c77d05f5d45016ea35a063cda8869c469d20"
+    "sha256": "1e541257d68d77edc0803975824e1c93059abbf771b7f2263f84e616bdc94ab2"
   },
   {
     "path": "manual-app/models/README.md",
@@ -137,7 +137,7 @@
   },
   {
     "path": "manual-app/packaging/README.md",
-    "sha256": "d0391de4da2f34d577bc691d0beea1992d38e0262316f5f33a5997c40f18e772"
+    "sha256": "dcd7e44a6a0a7e9c37c674da113b7464f40d2d78036d1816ad86f66110c0bfed"
   },
   {
     "path": "manual-app/packaging/ai_gui.spec",
@@ -197,7 +197,7 @@
   },
   {
     "path": "manual-app/scripts/build_ai_windows.ps1",
-    "sha256": "d7e5fe652c1157d2969b72464b9f681da0235be50a0e37426741937703171943"
+    "sha256": "834cbc0d724d3a4ccaf7f057108fd16313623c87bab3e56f2051eace56273dd7"
   },
   {
     "path": "manual-app/scripts/package_source.py",
@@ -234,6 +234,10 @@
   {
     "path": "manual-app/tests/test_review_geometry.py",
     "sha256": "a1a71a263894b8ed41539e5aabaa45b8867a8631ed29b826114cf3312d07c312"
+  },
+  {
+    "path": "manual-app/tests/test_roster_import_ui.py",
+    "sha256": "1cfa9c90ca9ec40a28127be5ad94df24b8a721756f9c21e10c5f0e94dc081735"
   },
   {
     "path": "manual-app/tests/test_smoke.py",

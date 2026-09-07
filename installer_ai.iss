@@ -3,7 +3,7 @@
 #define InstallDirName "牙槽骨吸收测量AI"
 #define AppVer GetEnv('APP_VERSION')
 #if AppVer == ""
-  #define AppVer "1.3.0-preview"
+  #define AppVer "1.3.1-preview"
 #endif
 #define AppExe "牙槽骨吸收测量AI.exe"
 #define SrcDir "dist\AI-integrated\PanoDentalAI"
