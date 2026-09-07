@@ -472,6 +472,7 @@ def main() -> int:
                         ("distal", "cej"), ("distal", "cej2"),
                         ("distal", "ac"), ("distal", "apex")], f"got {STEPS}")
 
+        before_dialog = win.ann.to_dict()
         dlg = ToothDialog(img, win.ann, list(win.ann.teeth),
                           get_formula(win.ann.formula_id), FormulaConfig(), win)
         dlg.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
@@ -481,12 +482,13 @@ def main() -> int:
         # 布局完成后必须真的缩放到牙框上，不能停在「整幅图缩成一小团」的状态
         check("放大到牙框（延迟 fit 生效）", dlg.canvas.current_scale() > 1.0,
               f"scale={dlg.canvas.current_scale():.3f}")
-        tooth3 = win.ann.teeth[2]
+        tooth3 = dlg._teeth[2]  # edits stay in the dialog transaction until accepted
         dlg._goto_tooth(2)
         for pt in ((540, 260), (543, 285), (545, 330), (550, 520)):
             dlg._on_click(QPointF(*pt))
         s = tooth3.site("mesial")
         check("四次点击落成近中 4 个点", s.filled_count == 4, f"got {s.filled_count}")
+        check("放大标定暂不改原标注", win.ann.to_dict() == before_dialog)
         check("点位对应正确（CEJ→2mm→AC→根尖 由冠向根）",
               s.cej.y < s.cej2.y < s.ac.y < s.apex.y)
         check("自动跳到远中", dlg.step == ("distal", "cej"), f"got {dlg.step}")
@@ -498,6 +500,14 @@ def main() -> int:
         check("撤销退回根尖", tooth3.site("mesial").apex is None
               and dlg.step == ("mesial", "apex"))
         dlg.close()
+        check("取消标定不泄露修改", win.ann.to_dict() == before_dialog)
+
+        accepted = ToothDialog(img, win.ann, list(win.ann.teeth),
+                               get_formula(win.ann.formula_id), FormulaConfig(), win)
+        accepted._goto_tooth(2)
+        accepted._on_click(QPointF(540, 260))
+        accepted.accept()
+        check("确认标定应用修改", win.ann.teeth[2].site("mesial").cej.as_tuple() == (540, 260))
 
         win.recalculate_all_silent = None
         win.close()
