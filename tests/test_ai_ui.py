@@ -114,18 +114,19 @@ def test_busy_ui_binds_case_and_uses_unadjusted_pixels(qtbot, tmp_path, monkeypa
     window._load_project(project)
     original_case = window.entry
     called = []
-    monkeypatch.setattr(window._ai, "start", lambda input_path, output:
+    monkeypatch.setattr(window._ai, "start", lambda input_path, output, **kwargs:
                         called.append((input_path, output)))
     window._adjust.invert = True
-    window.start_auto_annotation()
+    window.start_auto_segmentation()
     assert window._ai_busy
-    assert not window.btn_auto.isEnabled() and not window.cases.isEnabled()
+    assert not window.btn_auto_segment.isEnabled() and not window.cases.isEnabled()
     assert window.btn_cancel_auto.isEnabled()
     assert np.array_equal(load_gray(called[0][0]), image)
     window.open_case(object())
     assert window.entry is original_case
     window._ai_cancelled()
-    assert not window._ai_busy and window.btn_auto.isEnabled()
+    assert not window._ai_busy and window.btn_auto_segment.isEnabled()
+    assert not window.btn_auto_annotate.isEnabled()
     assert window.ann.teeth == []
 
 
@@ -182,23 +183,19 @@ def ai_completion_window(qtbot, tmp_path, monkeypatch):
     qtbot.addWidget(window)
     window._load_project(project)
     paths = []
-    monkeypatch.setattr(window._ai, "start", lambda input_path, output: paths.append((input_path, output)))
+    monkeypatch.setattr(window._ai, "start", lambda input_path, output, **kwargs: paths.append((input_path, output)))
 
     def prepare(status="done", teeth=True):
         project.set_status(window.entry, status)
-        window.start_auto_annotation()
+        window.start_auto_segmentation()
         input_path, output = paths[-1]
         output.mkdir()
-        result = {"run_id": "explicit-ui-protocol-fixture", "status": "completed",
+        result = {"run_id": "explicit-ui-protocol-fixture", "status": "completed", "mode": "segmentation",
                   "image": {"width": 100, "height": 80,
                             "sha256": hashlib.sha256(input_path.read_bytes()).hexdigest(),
                             "coordinate_space": "canonical_image_pixel_centers"},
                   "teeth": [{"instance_id": "fixture-tooth", "fdi": 16, "score": .9,
-                             "bbox_xyxy": [5, 5, 80, 70], "contours": [], "surfaces": [
-                                 {"object_score": .9, "points": {
-                                     "cej": {"xy": [20, 30], "score": .9},
-                                     "bone_level": {"xy": [20, 40], "score": .9},
-                                     "apex": {"xy": [20, 60], "score": .9}}}]}] if teeth else []}
+                             "bbox_xyxy": [5, 5, 80, 70], "contours": [], "surfaces": []}] if teeth else []}
         return output / "result.json", result
 
     return window, errors, prepare

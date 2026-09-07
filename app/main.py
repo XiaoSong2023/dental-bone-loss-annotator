@@ -33,15 +33,16 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv if argv is None else argv)
     selftest = "--selftest" in argv
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--annotation-mode", choices=("full", "manual"), default="manual")
-    options, qt_args = parser.parse_known_args([a for a in argv[1:] if a != "--selftest"])
+    # Accept old launcher arguments without exposing separate application modes.
+    parser.add_argument("--annotation-mode", help=argparse.SUPPRESS)
+    _options, qt_args = parser.parse_known_args([a for a in argv[1:] if a != "--selftest"])
     app = QApplication([argv[0], *qt_args])
     app.setOrganizationName(ORG)
     app.setApplicationName(APP)          # QSettings 键，保持稳定
     app.setApplicationDisplayName(APP_TITLE)
     theme.apply(app)
 
-    win = MainWindow(annotation_mode=options.annotation_mode)
+    win = MainWindow()
     win.show()
 
     if selftest:
@@ -50,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         def _done() -> None:
             _report(f"启动正常　耗时 {time.monotonic() - _T0:.2f}s"
                     f"　Qt 平台 {app.platformName()}"
-                    f"　annotation_mode={win.annotation_mode}"
+                    f"　workflow=unified　startup={'blank' if win.project is None else 'loaded'}"
                     f"　窗口 {win.width()}×{win.height()}")
             app.quit()
 

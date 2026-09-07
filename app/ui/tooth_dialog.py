@@ -3,7 +3,7 @@
 流程：选定 2–3 颗牙后逐颗放大，每颗按解剖顺序（由咬合面向根尖）标 8 个点：
     近中 P1 CEJ → P2 CEJ下2mm → P3 牙槽嵴顶 → P4 根尖
     远中 P5 CEJ → P6 CEJ下2mm → P7 牙槽嵴顶 → P8 根尖
-标完点「下一颗」，全部标完点「完成」。
+两侧四点标完或明确跳过后自动下一颗，最后一颗停留，点「完成标定」。
 
 步骤表是从 models.ROLES × SURFACES 自动派生的，将来再加点位不用改这里。
 
@@ -319,9 +319,15 @@ class ToothDialog(QDialog):
                 return i
         return len(STEPS) - 1
 
+    def _tooth_complete(self) -> bool:
+        return all(self._site(sf).skipped or all(self._site(sf).get(role) is not None for role in ROLES)
+                   for sf in SURFACES)
+
     def _advance(self) -> None:
         """空格：跳到下一个未填的点；本牙填满就跳下一颗。"""
-        for i in range(self._si + 1, len(STEPS)):
+        # Search the whole tooth before advancing, including any earlier hole.
+        order = list(range(self._si + 1, len(STEPS))) + list(range(self._si + 1))
+        for i in order:
             sf, r = STEPS[i]
             if self._site(sf).skipped:
                 continue
@@ -360,6 +366,9 @@ class ToothDialog(QDialog):
 
     # ── 落点 / 拖点 ───────────────────────────────────────────────
     def _on_click(self, pos: QPointF) -> None:
+        if self._tooth_complete():
+            self._refresh()
+            return
         sf, role = self.step
         site = self._site(sf)
         if site.skipped:
@@ -384,9 +393,9 @@ class ToothDialog(QDialog):
         if not self._undo:
             return
         tooth, sf, role, old = self._undo.pop()
-        if tooth in self._teeth:
-            self._goto_index_of(tooth)
         tooth.site(sf).set(role, old)
+        if tooth in self._teeth:
+            self._goto_tooth(self._teeth.index(tooth))
         self._si = STEPS.index((sf, role))
         self._refresh_overlay()
         self._refresh()
@@ -408,8 +417,10 @@ class ToothDialog(QDialog):
 
     def _toggle_skip(self, surface: str, on: bool) -> None:
         self._site(surface).skipped = on
-        if on and self.step[0] == surface:
+        if on:
             self._advance()
+        else:
+            self._si = self._first_unfilled_step()
         self._refresh_overlay()
         self._refresh()
 
@@ -457,7 +468,12 @@ class ToothDialog(QDialog):
         sf, role = self.step
         n = point_label(t.index, sf, role)
         side_label = getattr(self._site(sf), "display_label", SURFACE_LABEL[sf])
-        self.hint.setText(f"当前步骤：{n}　{side_label} · {ROLE_LABEL[role]}")
+        if self._tooth_complete():
+            self.hint.setText("本牙已标完或明确跳过。点击「完成标定」保存，再回主窗导出。"
+                              if self._ti == len(self._teeth) - 1 else
+                              "本牙已标完或明确跳过，可进入下一颗；拖动现有标点可继续复核。")
+        else:
+            self.hint.setText(f"当前步骤：{n}　{side_label} · {ROLE_LABEL[role]}")
 
         upper = bool(t.fdi and t.fdi // 10 in (1, 2, 5, 6))
         self.dir_hint.setText(
@@ -474,7 +490,7 @@ class ToothDialog(QDialog):
             candidate = meta.get("origin") == "model" and meta.get("review_status") != "reviewed"
             if site.skipped:
                 mark, color = "—", T.USUZUMI
-            elif (s, r) == self.step:
+            elif (s, r) == self.step and not self._tooth_complete():
                 mark, color = "●", T.AI
             elif filled:
                 mark, color = ("候", T.YAMABUKI) if candidate else ("✓", T.MATSUBA)

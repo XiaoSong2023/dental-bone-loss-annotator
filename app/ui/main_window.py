@@ -14,6 +14,7 @@ import hashlib
 import json
 import time
 import uuid
+from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
@@ -72,12 +73,10 @@ APP_TITLE = "牙槽骨吸收测量"
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, annotation_mode="full"):
+    def __init__(self, annotation_mode=None):
         super().__init__()
-        if annotation_mode not in ("full", "manual"):
-            raise ValueError("未知标注工作模式")
-        self.annotation_mode = annotation_mode
-        self._mode_title = APP_TITLE + (" · 分割人工版" if annotation_mode == "manual" else " · 自动候选版")
+        # Legacy callers may still pass annotation_mode; all use the same UI.
+        self._mode_title = APP_TITLE
         self.setWindowTitle(self._mode_title)
         self.resize(1560, 940)
 
@@ -155,7 +154,6 @@ class MainWindow(QMainWindow):
         edit_menu = m.addMenu("编辑(&E)")
         self.act_undo_box = self._act(edit_menu, "撤销框选", self.undo_box_edit, "Ctrl+Z")
         self.act_snap = self._act(edit_menu, "候选点贴合牙齿轮廓", self.snap_candidates)
-        self.act_snap.setVisible(self.annotation_mode == "full")
 
         fm = m.addMenu("项目(&P)")
         self._act(fm, "新建项目…", self.new_project, "Ctrl+N")
@@ -241,8 +239,8 @@ class MainWindow(QMainWindow):
         for fid, label in formula_choices():
             self.formula_combo.addItem(label, fid)
         self.formula_combo.setToolTip(
-            "两个公式用的是完全相同的 3 个点，只是分子的量法不同。\n"
-            "随时切换都不用重标 —— 文件里存的是坐标，切换后全项目自动重算。"
+            "四个公式共用每邻面的 CEJ、CEJ下2mm、AC、根尖四个坐标。\n"
+            "①②以 CEJ 为起点；③④需补标 CEJ下2mm。切换后全项目自动重算。"
         )
         self.formula_combo.currentIndexChanged.connect(self._on_formula_combo)
         top.addWidget(self.formula_combo)
@@ -270,7 +268,7 @@ class MainWindow(QMainWindow):
         self.btn_pick = QToolButton()
         self.btn_pick.setText("画框选牙  (T)")
         self.btn_pick.setCheckable(True)
-        self.btn_pick.setToolTip("拖出方框把可疑牙位框住，务必含牙冠 + 牙根 + 根尖；四角原图坐标随标注保存、导出")
+        self.btn_pick.setToolTip("拖出方框把可疑牙位框住，务必含牙冠 + 牙根 + 根尖；牙框在项目内保存，导出仅含当前标点")
         self.btn_pick.toggled.connect(self._toggle_pick)
         bot.addWidget(self.btn_pick)
         bot.addAction(self.act_undo_box)
@@ -280,14 +278,19 @@ class MainWindow(QMainWindow):
         self.btn_annotate.setText("开始标定  (Enter)")
         self.btn_annotate.clicked.connect(self.start_annotation)
         bot.addWidget(self.btn_annotate)
-        self.btn_auto = QToolButton()
-        self.btn_auto.setText("自动分割牙齿" if self.annotation_mode == "manual" else "自动分割与三点")
-        self.btn_auto.setToolTip("仅自动分割牙齿，双击牙框后手工标四点" if self.annotation_mode == "manual"
-            else "分割牙齿并生成贴合轮廓的三点候选；贴线只作几何校正，仍需复核解剖位置")
-        self.btn_auto.clicked.connect(self.start_auto_annotation)
-        bot.addWidget(self.btn_auto)
+        self.btn_auto_segment = QToolButton()
+        self.btn_auto_segment.setText("自动分割牙齿")
+        self.btn_auto_segment.setToolTip("仅分割牙齿并保存轮廓和牙框；现有标点保持原样")
+        self.btn_auto_segment.clicked.connect(self.start_auto_segmentation)
+        bot.addWidget(self.btn_auto_segment)
+        self.btn_auto_annotate = QToolButton()
+        self.btn_auto_annotate.setText("自动标注")
+        self.btn_auto_annotate.setToolTip("在当前牙框上识别 CEJ、AC、根尖候选；不重新分割，不填写 CEJ下2mm")
+        self.btn_auto_annotate.clicked.connect(self.start_auto_annotation)
+        bot.addWidget(self.btn_auto_annotate)
+        self.btn_auto = self.btn_auto_annotate  # Compatibility for existing UI integrations.
         self.btn_cancel_auto = QToolButton()
-        self.btn_cancel_auto.setText("取消自动标注")
+        self.btn_cancel_auto.setText("取消自动任务")
         self.btn_cancel_auto.clicked.connect(self._ai.cancel)
         self.btn_cancel_auto.setVisible(False)
         bot.addWidget(self.btn_cancel_auto)
@@ -579,6 +582,7 @@ class MainWindow(QMainWindow):
         )
         self.inspector.set_case(self.ann, self.project.grading)
         self.inspector.set_patient_worst(self._patient_worst())
+        self._update_enabled()
 
     def _patient_worst(self) -> tuple[str, float] | None:
         """根尖片模式下，同一病人跨全部片子的最重位点。
@@ -862,8 +866,35 @@ class MainWindow(QMainWindow):
                 w.blockSignals(False)
 
     # ══ 画框选牙 / 标定 ═════════════════════════════════════════════
+    def _teeth_snapshot(self, input_sha256: str) -> dict:
+        teeth = []
+        for tooth in self.ann.teeth:
+            if tooth.roi is None:
+                continue
+            x, y, w, h = tooth.roi
+            teeth.append({
+                "source_tooth_id": tooth.tooth_id, "instance_id": tooth.tooth_id,
+                "fdi": tooth.fdi, "origin": tooth.origin,
+                "score": tooth.segmentation.get("score"),
+                "bbox_xyxy": [x, y, x+w, y+h],
+                "contours": deepcopy(tooth.segmentation.get("contours", [])),
+            })
+        return {"schema_version": 1,
+                "image": {"width": self.ann.image_width, "height": self.ann.image_height,
+                          "sha256": input_sha256}, "teeth": teeth}
+
+    def start_auto_segmentation(self) -> None:
+        self._start_ai_operation("segmentation")
+
     def start_auto_annotation(self) -> None:
-        if self._ai_busy or self.project is None or self.entry is None or self._gray is None:
+        self._start_ai_operation("keypoints")
+
+    def _start_ai_operation(self, mode: str) -> None:
+        if (self._ai_busy or self.project is None or self.entry is None
+                or self.ann is None or self._gray is None):
+            return
+        if mode == "keypoints" and not any(t.roi is not None for t in self.ann.teeth):
+            self._set_hint("请先手动画框选牙或点击「自动分割牙齿」，再执行「自动标注」。")
             return
         self.save_current(silent=True)
         run_dir = self.project.root / "runs" / uuid.uuid4().hex
@@ -872,17 +903,30 @@ class MainWindow(QMainWindow):
             input_path = run_dir / "input.png"
             if not imwrite_unicode(input_path, self._gray):
                 raise OSError("无法保存本次自动标注的原始图像")
-            self._ai_context = (self.project, self.entry, self.ann, run_dir,
-                                input_path, "opencv_grayscale_uint8")
+            input_sha256 = hashlib.sha256(input_path.read_bytes()).hexdigest()
+            snapshot, teeth_path, teeth_sha256 = None, None, None
+            if mode == "keypoints":
+                snapshot = self._teeth_snapshot(input_sha256)
+                teeth_path = run_dir / "teeth.json"
+                teeth_path.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+                teeth_sha256 = hashlib.sha256(teeth_path.read_bytes()).hexdigest()
+            self._ai_context = {
+                "project": self.project, "entry": self.entry, "ann": self.ann,
+                "run_dir": run_dir, "input_path": input_path,
+                "preconversion": "opencv_grayscale_uint8", "mode": mode,
+                "input_sha256": input_sha256, "teeth_snapshot": snapshot,
+                "teeth_path": teeth_path, "teeth_sha256": teeth_sha256,
+            }
             self._ai_busy = True
-            self.btn_pick.setChecked(False)
+            self._set_view_tool(MODE_HAND)
             self._update_enabled()
-            self._set_hint("正在载入模型并自动分割牙齿…")
-            if self.annotation_mode == "manual":
+            if mode == "segmentation":
+                self._set_hint("正在载入模型并自动分割牙齿…")
                 self._ai.start(input_path, run_dir / "output", mode="segmentation")
             else:
-                self._ai.start(input_path, run_dir / "output")
-        except (OSError, RuntimeError) as exc:
+                self._set_hint(f"正在当前 {len(snapshot['teeth'])} 个牙框上识别三点候选…")
+                self._ai.start(input_path, run_dir / "output", mode="keypoints", teeth_path=teeth_path)
+        except (OSError, RuntimeError, ValueError) as exc:
             self._ai_failed(str(exc))
 
     def _ai_progress(self, event: dict) -> None:
@@ -903,7 +947,8 @@ class MainWindow(QMainWindow):
         context = self._ai_context
         if context is None:
             return
-        project, entry, ann, _run_dir, input_path, preconversion = context
+        project, entry, ann = context["project"], context["entry"], context["ann"]
+        input_path, preconversion, mode = context["input_path"], context["preconversion"], context["mode"]
         try:
             if project is not self.project or entry is not self.entry or ann is not self.ann:
                 raise RuntimeError("当前病例已切换，自动结果已留在 runs 文件夹，未应用到其他病例")
@@ -913,35 +958,57 @@ class MainWindow(QMainWindow):
             with input_path.open("rb") as stream:
                 input_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
             image = result.get("image", {})
-            if image.get("sha256") != input_sha256:
+            if image.get("sha256") != input_sha256 or input_sha256 != context["input_sha256"]:
                 raise ValueError("自动结果与本次输入图像的 SHA256 不一致，已拒绝应用")
             if image.get("coordinate_space") != "canonical_image_pixel_centers":
                 raise ValueError("自动结果的坐标空间不受支持，已拒绝应用")
-            if self.annotation_mode == "manual" and (result.get("mode") != "segmentation"
-                    or any(t.get("surfaces") for t in result.get("teeth", []))):
-                raise ValueError("人工版只接受无自动点的牙齿分割结果")
+            if result.get("mode") != mode:
+                raise ValueError("自动结果与本次请求的操作不一致，已拒绝应用")
+            if mode == "segmentation" and any(t.get("surfaces") for t in result.get("teeth", [])):
+                raise ValueError("自动分割仅接受牙齿轮廓和牙框，不能写入自动标点")
+            if mode == "keypoints":
+                snapshot = context["teeth_snapshot"]
+                if self._teeth_snapshot(input_sha256) != snapshot:
+                    raise ValueError("当前牙齿身份或牙框已改变，自动标注结果已保留但未应用")
+                if json.loads(context["teeth_path"].read_text(encoding="utf-8")) != snapshot:
+                    raise ValueError("本次牙框输入快照已改变，已拒绝应用")
+                if (hashlib.sha256(context["teeth_path"].read_bytes()).hexdigest() != context["teeth_sha256"]
+                        or result.get("teeth_source", {}).get("sha256") != context["teeth_sha256"]):
+                    raise ValueError("自动标注结果与本次牙框快照的 SHA256 不一致，已拒绝应用")
+                expected = {t["source_tooth_id"]: t for t in snapshot["teeth"]}
+                predictions = result.get("teeth", [])
+                ids = [t.get("source_tooth_id") for t in predictions]
+                if len(ids) != len(expected) or set(ids) != set(expected):
+                    raise ValueError("自动标注结果未完整对应本次牙框，已拒绝应用")
+                for prediction in predictions:
+                    if prediction.get("bbox_xyxy") != expected[prediction["source_tooth_id"]]["bbox_xyxy"]:
+                        raise ValueError("自动标注结果的牙框与输入快照不一致，已拒绝应用")
             result["result_ref"] = Path(result_path).relative_to(project.root).as_posix()
             result["source_case"] = {"image": entry.image, "sha1": entry.sha1}
             result["analysis_input"] = {"sha256": input_sha256, "preconversion": preconversion,
                                         "display_adjust_used": False,
                                         "input_ref": input_path.relative_to(project.root).as_posix()}
+            if mode == "keypoints":
+                result["analysis_input"].update({
+                    "teeth_ref": context["teeth_path"].relative_to(project.root).as_posix(),
+                    "teeth_sha256": context["teeth_sha256"],
+                })
             summary = merge_ai_result(ann, result)
-            if self.annotation_mode == "full":
+            if mode == "keypoints":
                 constrain_pending_candidates(ann)
             if (summary["added_teeth"] or summary["points_added"]) and entry.status != STATUS_FLAGGED:
                 project.set_status(entry, STATUS_IN_PROGRESS)
             self._mark_dirty()
             self.save_current(silent=True)
             self._refresh_all()
-            if self.annotation_mode == "manual":
+            if mode == "segmentation":
                 self._set_hint(f"分割已保存：{summary['added_teeth'] + summary['matched_teeth']} 颗牙。"
-                    "双击牙框直接放大，手工标注原有四点；按 T 可重画牙框，Ctrl+Z 撤销框选。")
+                    "可点击「自动标注」生成三点候选，或双击牙框手工标四点。")
             else:
                 self._set_hint(
-                    f"自动标注已保存：新增 {summary['added_teeth']} 颗牙，"
-                    f"补入 {summary['points_added']} 个候选点；"
+                    f"自动标注已保存：补入 {summary['points_added']} 个候选点；"
                     f"{summary['teeth_without_points']} 颗牙未检出三点。"
-                    "候选已贴合牙齿轮廓，解剖位置仍需复核；双击牙框补点。"
+                    "有轮廓时按轮廓约束候选；解剖位置仍需复核，双击牙框可补点。"
                 )
         except Exception as exc:
             self._ai_failed(f"自动结果无法应用：{exc}")
@@ -951,11 +1018,11 @@ class MainWindow(QMainWindow):
     def _ai_failed(self, message: str) -> None:
         self._ai_finish()
         self._set_hint(message)
-        QMessageBox.warning(self, "自动标注未完成", message)
+        QMessageBox.warning(self, "自动任务未完成", message)
 
     def _ai_cancelled(self) -> None:
         self._ai_finish()
-        self._set_hint("已取消自动标注，现有人工标注保持原样")
+        self._set_hint("已取消自动任务，现有标注保持原样")
 
     def _toggle_pick(self, on: bool) -> None:
         self._set_view_tool(MODE_PICK if on else MODE_HAND)
@@ -1028,10 +1095,10 @@ class MainWindow(QMainWindow):
 
     def undo_box_edit(self) -> None:
         if self.ann is not None and not self._ai_busy and undo_box(self.ann):
-            self._box_edit_finished("已撤销上一次框选；标点保留，四角坐标已更新。")
+            self._box_edit_finished("已恢复原框；标点保留。")
 
     def snap_candidates(self) -> None:
-        if self.ann is None or self._ai_busy or self.annotation_mode != "full":
+        if self.ann is None or self._ai_busy:
             return
         stats = constrain_pending_candidates(self.ann)
         self._box_edit_finished(f"已将 {stats['projected']} 个未修改候选贴合轮廓，"
@@ -1242,9 +1309,14 @@ class MainWindow(QMainWindow):
             a.setEnabled(has_case)
         for w in (self.btn_pick, self.btn_hand, self.btn_annotate, self.btn_done, self.btn_flag):
             w.setEnabled(has_case)
-        self.btn_auto.setEnabled(has_case and self._gray is not None)
+        self.btn_auto_segment.setEnabled(has_case and self._gray is not None)
+        has_boxes = has_case and self._gray is not None and any(t.roi is not None for t in self.ann.teeth)
+        self.btn_auto_annotate.setEnabled(has_boxes)
+        self.btn_auto_annotate.setToolTip(
+            "在当前牙框上识别 CEJ、AC、根尖候选；不重新分割，不填写 CEJ下2mm" if has_boxes
+            else "请先手动画框选牙或点击「自动分割牙齿」，再执行自动标注")
         self.act_undo_box.setEnabled(has_case and can_undo_box(self.ann))
-        self.act_snap.setEnabled(has_case and self.annotation_mode == "full")
+        self.act_snap.setEnabled(has_case)
         self.btn_cancel_auto.setVisible(self._ai_busy)
         self.btn_cancel_auto.setEnabled(self._ai_busy)
         self.splitter.setEnabled(available)
@@ -1278,22 +1350,6 @@ class MainWindow(QMainWindow):
         if (st := s.value("splitter")) is not None:
             self.splitter.restoreState(st)
         self.setAcceptDrops(True)
-        QTimer.singleShot(0, self._restore_last_project)
-
-    def _restore_last_project(self) -> None:
-        """启动后自动打开上次的项目。
-
-        ⚠️ 必须先检查有没有项目已经被打开 —— 这个回调是延迟执行的，
-        如果期间用户（或调用方）已经打开了别的项目，直接加载会把它顶掉。
-        """
-        if self.project is not None:
-            return
-        last = QSettings(ORG, APP).value("last_project")
-        if last and Path(str(last)).exists():
-            try:
-                self._load_project(Project.open(Path(str(last))))
-            except OSError:
-                pass
 
     def closeEvent(self, e) -> None:
         self._ai.stop()
@@ -1311,15 +1367,17 @@ HELP_TEXT = """\
    · 按文件内容 sha1 自动去重
    · 按文件名自然排序：1, 2, 10 而不是 1, 10, 2
 3. 项目 → 导入名册，一次性带入全部年龄
-4. 点击「自动分割与三点」生成牙齿轮廓和 CEJ / AC / 根尖候选。
-   分割人工版只分割牙齿，不自动打点。双击牙框直接进入四点标定。
-   自动候选版将模型点投影到牙齿轮廓，贴线不等于解剖位置已准确。
+4. 点击「自动分割牙齿」只生成牙齿轮廓和牙框。
+   有牙框后，可点击「自动标注」识别 CEJ / AC / 根尖候选，或双击牙框手工标四点。
+   两个操作均需主动点击；启动不打开上次项目、不运行模型。
+   模型点有轮廓时按轮廓约束，贴线不等于解剖位置已准确。
    编辑 → 候选点贴合牙齿轮廓，可校正旧项目中未人工修改的候选。
-   也可按 T 手工画框；方框四角原图坐标会保存并一并导出。
+   也可按 T 手工画框；牙框在项目内保留便于继续编辑，导出只含当前标点。
    重画会替换对应旧框；重叠多框需选择。Ctrl+Z 撤销框选，重开仍有效。
 5. 自动候选带「候」标记，直接拖动调整，或 Enter 放大复核。
    模型的图像左/右需要在放大窗口确认近中/远中；牙位号也可修改。
    每侧保留 CEJ / CEJ下2mm / AC / 根尖四个手工点位，两侧共8点。
+   两面四点标完或明确跳过后自动进入下一牙；最后一牙停留，点击「完成标定」。
    自动标注不填写 CEJ下2mm；需要③④公式时请自行补标。
    放大窗口按「完成标定」应用修改，「取消」放弃本次修改。
 6. Ctrl+Enter 完成本例并自动跳到下一张
@@ -1327,7 +1385,8 @@ HELP_TEXT = """\
 【计算】
    ① 直线法：‖AC−CEJ‖ ÷ ‖根尖−CEJ‖
    ② 投影法：分子改取 (AC−CEJ) 在 CEJ→根尖长轴上的投影（默认）
-   两者用同一组点，工具栏随时切换，全项目自动重算，不用重标。
+   ③ 直线法、④ 投影法：以人工标出的 CEJ下2mm 替换起点。
+   标满四点后四个公式均可计算，工具栏切换后全项目自动重算。
 
    骨吸收年龄比 = 最重位点比例 ÷ 年龄
    区间 = 该比例落在 2018 分类的 <15% / 15%–33% / >33% 哪一段

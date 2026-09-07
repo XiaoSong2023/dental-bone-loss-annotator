@@ -318,6 +318,8 @@ def main() -> int:
 
         win = MainWindow()
         check("主窗口构建", win is not None)
+        for _ in range(3): appq.processEvents()
+        check("启动空白且不恢复上次项目", win.project is None and not win.view.has_image)
         win._load_project(proj)
         check("加载项目后有列表", win.cases.lists[0].count() + win.cases.lists[1].count() == 3)
 
@@ -325,10 +327,9 @@ def main() -> int:
         check("打开病例", win.ann is not None and win._gray is not None)
         check("打开即进入抓手模式", win.btn_hand.isChecked() and not win.btn_pick.isChecked())
 
-        # 延迟恢复「上次项目」不能顶掉调用方已经打开的项目
-        win._restore_last_project()
+        # 处理后续事件不会自动打开或切换其他项目。
         for _ in range(3): appq.processEvents()
-        check("延迟恢复不覆盖已打开项目",
+        check("后续事件不切换已打开项目",
               win.project is proj and win.ann is not None)
 
         # ── 画框选牙的真实鼠标交互 ──
