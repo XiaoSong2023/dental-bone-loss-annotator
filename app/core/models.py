@@ -213,6 +213,7 @@ class Tooth:
     origin: str = "manual"
     segmentation: dict = field(default_factory=dict)
     candidate_surfaces: list[dict] = field(default_factory=list)
+    initial_auto_roi: Optional[tuple[float, float, float, float]] = None
 
     @property
     def roi_corners(self) -> dict[str, list[float]]:
@@ -277,6 +278,7 @@ class Tooth:
             "tooth_id": self.tooth_id, "origin": self.origin,
             "segmentation": copy.deepcopy(self.segmentation),
             "candidate_surfaces": copy.deepcopy(self.candidate_surfaces),
+            "initial_auto_roi": list(self.initial_auto_roi) if self.initial_auto_roi else None,
         }
 
     @classmethod
@@ -297,6 +299,7 @@ class Tooth:
             origin=d.get("origin", "manual"),
             segmentation=copy.deepcopy(d.get("segmentation", {})),
             candidate_surfaces=copy.deepcopy(d.get("candidate_surfaces", [])),
+            initial_auto_roi=tuple(d["initial_auto_roi"]) if d.get("initial_auto_roi") else None,
         )
 
 
@@ -374,7 +377,7 @@ class CaseResult:
     interval: Optional[str] = None          # "I" / "II" / "III"，2018 影像学骨吸收区间
 
 
-SCHEMA_VERSION = 4     # v4: explicit box corners and automatic prediction provenance
+SCHEMA_VERSION = 5     # v5: persisted rectangle undo and initial automatic rectangle
 
 
 @dataclass
@@ -392,6 +395,7 @@ class CaseAnnotation:
     duration_s: float = 0.0
     status: str = "pending"          # pending / in_progress / done / flagged
     ai_runs: list[dict] = field(default_factory=list)
+    box_history: list[dict] = field(default_factory=list)
 
     # ── 牙管理 ───────────────────────────────────────────────────
     def add_tooth(self, fdi: Optional[int] = None,
@@ -466,6 +470,7 @@ class CaseAnnotation:
             "teeth": [t.to_dict() for t in self.teeth],
             "bone_crest_curve": self.crest.to_dict(),
             "ai_runs": copy.deepcopy(self.ai_runs),
+            "box_history": copy.deepcopy(self.box_history),
             "meta": {
                 "created": self.created,
                 "updated": self.updated,
@@ -495,4 +500,5 @@ class CaseAnnotation:
             duration_s=float(meta.get("duration_s", 0) or 0),
             status=meta.get("status", "pending"),
             ai_runs=copy.deepcopy(d.get("ai_runs", [])),
+            box_history=copy.deepcopy(d.get("box_history", [])),
         )

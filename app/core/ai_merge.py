@@ -35,6 +35,10 @@ def _iou(roi, box):
 
 def _match_score(tooth, prediction):
     score = _iou(tooth.roi, prediction["bbox_xyxy"])
+    previous_box = tooth.segmentation.get("bbox_xyxy")
+    if previous_box and len(previous_box) == 4:
+        a, b, c, d = previous_box
+        score = max(score, _iou((a, b, c-a, d-b), prediction["bbox_xyxy"]))
     if score >= .5 or tooth.roi is None:
         return score
     # A hand-drawn context box may deliberately be larger than the tooth mask.
@@ -97,6 +101,8 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
                 point = surface.get("points", {}).get(kind)
                 if point is not None:
                     point["xy"] = _xy(point["xy"], width, height)
+                    if point.get("raw_xy") is not None:
+                        point["raw_xy"] = _xy(point["raw_xy"], width, height)
                     _score(point["score"])
         if prediction.get("mask_ref"):
             _relative(prediction["mask_ref"])
@@ -117,12 +123,15 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
             if tooth.fdi is None:
                 tooth.fdi = prediction.get("fdi")
         matched_ids.add(tooth.tooth_id)
+        if tooth.initial_auto_roi is None:
+            tooth.initial_auto_roi = (a, b, c-a, d-b)
         mask_ref = prediction.get("mask_ref")
         if mask_ref and relative_root is not None:
             mask_ref = str(relative_root / _relative(mask_ref))
         tooth.segmentation = {"run_id": run_id, "instance_id": prediction["instance_id"],
                               "score": prediction["score"], "bbox_xyxy": box,
                               "contours": prediction.get("contours", []), "mask_ref": mask_ref}
+        tooth.segmentation["contour_sha256"] = prediction.get("contour_sha256")
         surfaces = prediction.get("surfaces", [])
         tooth.candidate_surfaces.extend(copy.deepcopy([s | {"run_id": run_id} for s in surfaces]))
         if not surfaces:
@@ -149,7 +158,9 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
                         or site.point_meta.get(role, {}).get("review_status") == "rejected"):
                     continue
                 site.set(role, Pt(*point["xy"]))
-                site.point_meta[role] = {"origin": "model", "raw_xy": list(point["xy"]),
+                site.point_meta[role] = {"origin": "model", "raw_xy": list(point.get("raw_xy", point["xy"])),
+                                         "projected_xy": copy.deepcopy(point.get("projected_xy")),
+                                         "boundary_projection": copy.deepcopy(point.get("boundary_projection")),
                                          "score": point["score"], "run_id": run_id,
                                          "model_id": "denpar-surface-pose", "edited": False,
                                          "review_status": "pending", "history": []}
@@ -163,6 +174,7 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
                             "preprocessing": copy.deepcopy(result.get("preprocessing", {})),
                             "domain_validation": result.get("domain_validation"),
                             "accuracy": result.get("accuracy"),
+                            "mode": result.get("mode", "full"),
                             "training_steps": result.get("training_steps"), "device": result.get("device", "cpu"),
                             "status": result.get("status"), "merge_policy": "preserve_existing_marks_fill_empty_groups"})
     working.status = "in_progress"
