@@ -517,7 +517,10 @@ class MainWindow(QMainWindow):
             entry = self.project.find(case_id)
             if entry is None:
                 continue
-            ann = self.project.load_annotation(entry)
+            # 当前病例始终更新界面持有的同一份标注；否则刷新/切换时
+            # save_current 会把导入前的年龄、性别写回磁盘，覆盖名册。
+            ann = (self.ann if entry is self.entry and self.ann is not None
+                   else self.project.load_annotation(entry))
             changed = False
             if row.age is not None and ann.patient.age != row.age:
                 ann.patient.age, changed = row.age, True
@@ -536,10 +539,10 @@ class MainWindow(QMainWindow):
             detail += "\n\n未匹配的病例：\n" + "、".join(report.unmatched_cases[:20])
             if len(report.unmatched_cases) > 20:
                 detail += f" …等 {len(report.unmatched_cases)} 例"
-        QMessageBox.information(self, "名册匹配结果", detail)
         if self.entry is not None:
-            self.open_case(self.entry, force=True)
+            self._refresh_all()
         self.cases.refresh(self.entry)
+        QMessageBox.information(self, "名册匹配结果", detail)
 
     # ══ 病例 ════════════════════════════════════════════════════════
     def open_case(self, entry: CaseEntry, force: bool = False) -> None:
