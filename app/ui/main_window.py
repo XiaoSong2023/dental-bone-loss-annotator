@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -851,7 +852,8 @@ class MainWindow(QMainWindow):
             input_path = run_dir / "input.png"
             if not imwrite_unicode(input_path, self._gray):
                 raise OSError("无法保存本次自动标注的原始图像")
-            self._ai_context = (self.project, self.entry, self.ann, run_dir)
+            self._ai_context = (self.project, self.entry, self.ann, run_dir,
+                                input_path, "opencv_grayscale_uint8")
             self._ai_busy = True
             self.btn_pick.setChecked(False)
             self._update_enabled()
@@ -878,15 +880,28 @@ class MainWindow(QMainWindow):
         context = self._ai_context
         if context is None:
             return
-        project, entry, ann, _run_dir = context
+        project, entry, ann, _run_dir, input_path, preconversion = context
         try:
             if project is not self.project or entry is not self.entry or ann is not self.ann:
                 raise RuntimeError("当前病例已切换，自动结果已留在 runs 文件夹，未应用到其他病例")
             from ..core.ai_merge import merge_ai_result
             with Path(result_path).open(encoding="utf-8") as stream:
                 result = json.load(stream)
+            with input_path.open("rb") as stream:
+                input_sha256 = hashlib.file_digest(stream, "sha256").hexdigest()
+            image = result.get("image", {})
+            if image.get("sha256") != input_sha256:
+                raise ValueError("自动结果与本次输入图像的 SHA256 不一致，已拒绝应用")
+            if image.get("coordinate_space") != "canonical_image_pixel_centers":
+                raise ValueError("自动结果的坐标空间不受支持，已拒绝应用")
             result["result_ref"] = Path(result_path).relative_to(project.root).as_posix()
+            result["source_case"] = {"image": entry.image, "sha1": entry.sha1}
+            result["analysis_input"] = {"sha256": input_sha256, "preconversion": preconversion,
+                                        "display_adjust_used": False,
+                                        "input_ref": input_path.relative_to(project.root).as_posix()}
             summary = merge_ai_result(ann, result)
+            if (summary["added_teeth"] or summary["points_added"]) and entry.status != STATUS_FLAGGED:
+                project.set_status(entry, STATUS_IN_PROGRESS)
             self._mark_dirty()
             self.save_current(silent=True)
             self._refresh_all()

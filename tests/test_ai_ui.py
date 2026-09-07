@@ -1,7 +1,11 @@
 """UI/protocol tests use explicit fixtures; they do not validate model accuracy."""
 import os
 import sys
+import hashlib
+import json
 from pathlib import Path
+
+import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -156,3 +160,78 @@ def test_candidate_review_keeps_raw_and_requires_explicit_side(qtbot):
     restored = CaseAnnotation.from_dict(ann.to_dict())
     assert restored.teeth[0].site("distal").cej.as_tuple() == (30, 25)
     assert restored.teeth[0].site("distal").point_meta["cej"]["raw_xy"] == [20, 20]
+
+
+@pytest.fixture
+def ai_completion_window(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QMessageBox
+    from app.core.project import Project
+    from app.imaging.loader import imwrite_unicode
+    from app.ui import main_window
+    monkeypatch.setattr(main_window.MainWindow, "_restore_geometry", lambda self: None)
+    monkeypatch.setattr(main_window, "QSettings", lambda *_args:
+                        QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat))
+    errors = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda _p, _title, text: errors.append(text))
+    source = tmp_path / "explicit-ui-protocol-fixture.png"
+    imwrite_unicode(source, np.zeros((80, 100), dtype=np.uint8))
+    project = Project.create(tmp_path / "project")
+    project.import_paths([source])
+    window = main_window.MainWindow()
+    qtbot.addWidget(window)
+    window._load_project(project)
+    paths = []
+    monkeypatch.setattr(window._ai, "start", lambda input_path, output: paths.append((input_path, output)))
+
+    def prepare(status="done", teeth=True):
+        project.set_status(window.entry, status)
+        window.start_auto_annotation()
+        input_path, output = paths[-1]
+        output.mkdir()
+        result = {"run_id": "explicit-ui-protocol-fixture", "status": "completed",
+                  "image": {"width": 100, "height": 80,
+                            "sha256": hashlib.sha256(input_path.read_bytes()).hexdigest(),
+                            "coordinate_space": "canonical_image_pixel_centers"},
+                  "teeth": [{"instance_id": "fixture-tooth", "fdi": 16, "score": .9,
+                             "bbox_xyxy": [5, 5, 80, 70], "contours": [], "surfaces": [
+                                 {"object_score": .9, "points": {
+                                     "cej": {"xy": [20, 30], "score": .9},
+                                     "bone_level": {"xy": [20, 40], "score": .9},
+                                     "apex": {"xy": [20, 60], "score": .9}}}]}] if teeth else []}
+        return output / "result.json", result
+
+    return window, errors, prepare
+
+
+@pytest.mark.parametrize("invalid_field,invalid_value", [
+    ("sha256", "0" * 64), ("coordinate_space", "normalized_coordinates"),
+])
+def test_same_size_wrong_image_or_coordinate_space_is_rejected(ai_completion_window, invalid_field, invalid_value):
+    window, errors, prepare = ai_completion_window
+    path, result = prepare()
+    before = window.ann.to_dict()
+    result["image"][invalid_field] = invalid_value
+    path.write_text(json.dumps(result), encoding="utf-8")
+    window._ai_completed(str(path))
+    assert errors and window.ann.to_dict() == before
+    assert window.entry.status == "done" and not window._ai_busy
+
+
+@pytest.mark.parametrize("previous_status,has_predictions,expected_status", [
+    ("done", True, "in_progress"), ("flagged", True, "flagged"),
+    ("pending", True, "in_progress"), ("done", False, "done"),
+])
+def test_new_candidates_reset_done_but_preserve_flagged(ai_completion_window, previous_status, has_predictions, expected_status):
+    window, errors, prepare = ai_completion_window
+    path, result = prepare(previous_status, has_predictions)
+    path.write_text(json.dumps(result), encoding="utf-8")
+    window._ai_completed(str(path))
+    assert not errors
+    assert window.entry.status == window.ann.status == expected_status
+    assert window.project.load_annotation(window.entry).status == expected_status
+    run = window.ann.ai_runs[-1]
+    assert run["source_case"]["sha1"] == window.entry.sha1
+    assert run["analysis_input"]["sha256"] == result["image"]["sha256"]
+    assert run["analysis_input"]["preconversion"] == "opencv_grayscale_uint8"
+    assert run["analysis_input"]["display_adjust_used"] is False

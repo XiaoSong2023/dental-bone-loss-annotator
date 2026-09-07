@@ -38,6 +38,8 @@ def main() -> int:
     report = {
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "status": "running", "new_inference_calls": 0,
+        "inference_protocol_exercised": False,
+        "scope": "Existing real JPEG inference result replay through UI completion, editing and exports; not a complete QProcess run",
         "source_result": str(result_path), "source_image": str(image_path),
         "mouse_edit_is_engineering_verification_not_clinical_review": True,
         "assertions": [],
@@ -91,7 +93,10 @@ def main() -> int:
         copied = run_dir / "output"
         shutil.copytree(result_path.parent, copied)
         copied_result = copied / result_path.name
+        input_snapshot = run_dir / "source-input.jpg"
+        shutil.copy2(image_path, input_snapshot)
         check("original_model_output_copied_unchanged", digest(copied_result) == digest(result_path))
+        check("input_snapshot_matches_unmodified_model_source", digest(input_snapshot) == original["image"]["sha256"])
 
         with patch.object(main_window.MainWindow, "_restore_geometry", lambda self: None), \
              patch.object(main_window, "QSettings", lambda *_args:
@@ -106,7 +111,8 @@ def main() -> int:
             settle()
             check("image_coordinate_dimensions_match", (window.ann.image_width, window.ann.image_height) ==
                   (original["image"]["width"], original["image"]["height"]))
-            window._ai_context = (window.project, window.entry, window.ann, run_dir)
+            window._ai_context = (window.project, window.entry, window.ann, run_dir,
+                                  input_snapshot, "source_jpeg_snapshot_no_conversion")
             window._ai_busy = True
             window.btn_pick.setChecked(False)
             window._update_enabled()
@@ -132,6 +138,9 @@ def main() -> int:
             check("anatomical_sides_not_assumed", all(not s.side_confirmed for t in ann.teeth for s in t.sites if s.filled_count))
             check("run_reference_is_portable", not Path(ann.ai_runs[-1]["result_ref"]).is_absolute()
                   and (project.root / ann.ai_runs[-1]["result_ref"]).is_file())
+            check("analysis_input_provenance_is_accurate", ann.ai_runs[-1]["analysis_input"]["sha256"] == original["image"]["sha256"]
+                  and ann.ai_runs[-1]["analysis_input"]["preconversion"] == "source_jpeg_snapshot_no_conversion"
+                  and ann.ai_runs[-1]["source_case"]["sha1"] == window.entry.sha1)
             check("all_segmentation_masks_preserved", all((project.root / t.segmentation["mask_ref"]).is_file() for t in ann.teeth))
             window.setWindowTitle("真实模型自动结果 · UI 验证测试项目")
             window.view.fit()
