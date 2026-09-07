@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import copy
+import math
 from typing import Literal, Optional
+from uuid import uuid4
 
 from . import formula as F
 from . import geometry as g
@@ -76,11 +79,16 @@ class Pt:
     x: float
     y: float
 
+    def __post_init__(self):
+        self.x, self.y = float(self.x), float(self.y)
+        if not math.isfinite(self.x) or not math.isfinite(self.y):
+            raise ValueError("点坐标必须是有限数值")
+
     def as_tuple(self) -> g.Vec:
         return (self.x, self.y)
 
     def to_dict(self, label: str = "") -> dict:
-        d = {"x": round(self.x, 2), "y": round(self.y, 2)}
+        d = {"x": self.x, "y": self.y}
         if label:
             d["label"] = label
         return d
@@ -103,12 +111,34 @@ class Site:
     ac: Optional[Pt] = None
     apex: Optional[Pt] = None
     skipped: bool = False       # 该侧被邻牙遮挡看不清 → 跳过，不参与取大
+    point_meta: dict = field(default_factory=dict)
+    image_side: Optional[str] = None
+    side_confirmed: bool = True   # legacy manual sites already have an anatomical label
+
+    @property
+    def display_label(self) -> str:
+        if not self.side_confirmed:
+            side = {"image_left": "图像左", "image_right": "图像右"}.get(self.image_side, "候选侧")
+            return side + "（待确认）"
+        return SURFACE_LABEL.get(self.surface, self.surface)
 
     # ── 点访问 ───────────────────────────────────────────────────
     def get(self, role: str) -> Optional[Pt]:
         return getattr(self, role)
 
     def set(self, role: str, pt: Optional[Pt]) -> None:
+        if role not in ROLES:
+            raise ValueError("未知点位类型")
+        previous = self.get(role)
+        if previous == pt:
+            return
+        info = self.point_meta.setdefault(role, {"origin": "manual", "raw_xy": None,
+                                                "edited": False, "history": []})
+        info.setdefault("history", []).append({"previous_xy": list(previous.as_tuple()) if previous else None,
+                                "current_xy": list(pt.as_tuple()) if pt else None,
+                                "at": datetime.now(timezone.utc).isoformat(timespec="milliseconds")})
+        info["edited"] = info.get("origin") == "model" or info.get("edited", False)
+        info["review_status"] = "reviewed" if pt else "rejected"
         setattr(self, role, pt)
 
     def has(self, roles) -> bool:
@@ -146,7 +176,10 @@ class Site:
 
     # ── 序列化 ───────────────────────────────────────────────────
     def to_dict(self, tooth_index: int) -> dict:
-        d: dict = {"surface": self.surface, "skipped": self.skipped}
+        d: dict = {"surface": self.surface, "skipped": self.skipped,
+                   "image_side": self.image_side, "side_confirmed": self.side_confirmed,
+                   "surface_semantics": "anatomical" if self.side_confirmed else "unconfirmed_slot",
+                   "point_meta": copy.deepcopy(self.point_meta)}
         for r in ROLES:
             p = self.get(r)
             d[r] = p.to_dict(point_label(tooth_index, self.surface, r)) if p else None
@@ -161,6 +194,9 @@ class Site:
             ac=Pt.from_dict(d.get("ac")),
             apex=Pt.from_dict(d.get("apex")),
             skipped=bool(d.get("skipped", False)),
+            point_meta=copy.deepcopy(d.get("point_meta", {})),
+            image_side=d.get("image_side"),
+            side_confirmed=bool(d.get("side_confirmed", True)),
         )
 
 
@@ -173,6 +209,19 @@ class Tooth:
     index: int = 0                                  # 本片中的第几颗（决定 P 编号与颜色）
     roi: Optional[tuple[float, float, float, float]] = None   # x, y, w, h
     sites: list[Site] = field(default_factory=lambda: [Site("mesial"), Site("distal")])
+    tooth_id: str = field(default_factory=lambda: uuid4().hex)
+    origin: str = "manual"
+    segmentation: dict = field(default_factory=dict)
+    candidate_surfaces: list[dict] = field(default_factory=list)
+
+    @property
+    def roi_corners(self) -> dict[str, list[float]]:
+        """Clockwise rectangle corners in original image pixels, always following roi."""
+        if self.roi is None:
+            return {}
+        x, y, w, h = self.roi
+        return {"top_left": [x, y], "top_right": [x+w, y],
+                "bottom_right": [x+w, y+h], "bottom_left": [x, y+h]}
 
     @property
     def color(self) -> str:
@@ -222,7 +271,12 @@ class Tooth:
             "index": self.index,
             "color": self.color,
             "roi": list(self.roi) if self.roi else None,
+            "roi_corners": self.roi_corners,
+            "roi_coordinate_space": "image_pixels",
             "sites": [s.to_dict(self.index) for s in self.sites],
+            "tooth_id": self.tooth_id, "origin": self.origin,
+            "segmentation": copy.deepcopy(self.segmentation),
+            "candidate_surfaces": copy.deepcopy(self.candidate_surfaces),
         }
 
     @classmethod
@@ -239,6 +293,10 @@ class Tooth:
             index=int(d.get("index", 0)),
             roi=tuple(roi) if roi else None,
             sites=sites,
+            tooth_id=d.get("tooth_id") or uuid4().hex,
+            origin=d.get("origin", "manual"),
+            segmentation=copy.deepcopy(d.get("segmentation", {})),
+            candidate_surfaces=copy.deepcopy(d.get("candidate_surfaces", [])),
         )
 
 
@@ -316,7 +374,7 @@ class CaseResult:
     interval: Optional[str] = None          # "I" / "II" / "III"，2018 影像学骨吸收区间
 
 
-SCHEMA_VERSION = 3     # v3 起每个位点可含 cej2（CEJ 下 2mm）
+SCHEMA_VERSION = 4     # v4: explicit box corners and automatic prediction provenance
 
 
 @dataclass
@@ -333,6 +391,7 @@ class CaseAnnotation:
     updated: str = ""
     duration_s: float = 0.0
     status: str = "pending"          # pending / in_progress / done / flagged
+    ai_runs: list[dict] = field(default_factory=list)
 
     # ── 牙管理 ───────────────────────────────────────────────────
     def add_tooth(self, fdi: Optional[int] = None,
@@ -406,6 +465,7 @@ class CaseAnnotation:
             "formula": {"id": self.formula_id},
             "teeth": [t.to_dict() for t in self.teeth],
             "bone_crest_curve": self.crest.to_dict(),
+            "ai_runs": copy.deepcopy(self.ai_runs),
             "meta": {
                 "created": self.created,
                 "updated": self.updated,
@@ -434,4 +494,5 @@ class CaseAnnotation:
             updated=meta.get("updated", ""),
             duration_s=float(meta.get("duration_s", 0) or 0),
             status=meta.get("status", "pending"),
+            ai_runs=copy.deepcopy(d.get("ai_runs", [])),
         )

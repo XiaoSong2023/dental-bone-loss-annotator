@@ -13,7 +13,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from .models import CaseAnnotation
+from .models import CaseAnnotation, SCHEMA_VERSION
 
 
 def write_json_atomic(path: Path, data: dict) -> None:
@@ -21,7 +21,7 @@ def write_json_atomic(path: Path, data: dict) -> None:
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2, allow_nan=False)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)           # 同盘 replace 是原子的
@@ -100,13 +100,15 @@ def migrate(d: dict) -> dict:
     所以**必须原样保留**，不能像早期版本那样丢弃。
     """
     version = int(d.get("schema_version", 1))
+    if version > SCHEMA_VERSION:
+        raise ValueError("标注文件来自更新的软件版本，请更新软件后打开")
     if version < 2:
         for tooth in d.get("teeth", []):
             shared_apex = tooth.pop("apex", None)
             for site in tooth.get("sites", []):
                 if shared_apex and not site.get("apex"):
                     site["apex"] = dict(shared_apex)
-    d["schema_version"] = 3
+    d["schema_version"] = SCHEMA_VERSION
     return d
 
 

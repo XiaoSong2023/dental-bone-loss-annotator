@@ -46,6 +46,41 @@ SITES_HEADER = [
     "是否最重", "跳过", "警告",
 ]
 
+BOX_CORNER_HEADER = [f"框{corner}_{axis}" for corner in ("左上", "右上", "右下", "左下")
+                     for axis in ("x", "y")]
+SITES_HEADER += BOX_CORNER_HEADER
+SITES_HEADER += ["侧别已确认", *[f"{role}_{kind}" for role in ("CEJ", "CEJ2mm", "AC", "APEX")
+                              for kind in ("来源", "置信分数", "人工修正", "原始x", "原始y")], "坐标空间"]
+BOXES_HEADER = ["病例号", "片名", "牙序", "牙位FDI", *BOX_CORNER_HEADER, "坐标空间", "框来源"]
+
+
+def _box_values(tooth) -> list:
+    corners = tooth.roi_corners
+    return [_fmt(v, 6) for name in ("top_left", "top_right", "bottom_right", "bottom_left")
+            for v in corners.get(name, [None, None])]
+
+
+def _point_provenance(site) -> list:
+    values = ["是" if site.side_confirmed else "否"]
+    for role in ("cej", "cej2", "ac", "apex"):
+        info = site.point_meta.get(role, {})
+        raw = info.get("raw_xy") or [None, None]
+        values.extend([info.get("origin", "manual" if site.get(role) else ""), _fmt(info.get("score"), 6),
+                       "是" if info.get("edited") else "否", _fmt(raw[0], 6), _fmt(raw[1], 6)])
+    return [*values, "image_pixels"]
+
+
+def box_rows(project: Project) -> list[list]:
+    """Include box-only teeth even when no landmark has been placed yet."""
+    rows = []
+    for entry in project.sorted_cases():
+        ann = project.load_annotation(entry)
+        for tooth in ann.teeth:
+            rows.append([ann.patient.id or entry.patient_key or entry.case_id, entry.display,
+                         tooth.index + 1, tooth.fdi or "", *_box_values(tooth), "image_pixels",
+                         getattr(tooth, "origin", "manual")])
+    return rows
+
 
 def _fmt(v, nd: int = 4):
     if v is None:
@@ -148,7 +183,7 @@ def summary_rows(project: Project, cfg: GradingConfig,
             _fmt(age, 1),
             sex,
             res.worst_tooth.name if res.worst_tooth else "",
-            SURFACE_LABEL.get(res.worst_site.surface, "") if res.worst_site else "",
+            res.worst_site.display_label if res.worst_site else "",
             _fmt(res.worst_ratio),
             "" if res.worst_ratio is None else f"{res.worst_ratio * 100:.1f}%",
             _fmt(res.bone_loss_age_ratio, 6),
@@ -182,7 +217,7 @@ def site_rows(project: Project, cfg: GradingConfig,
                 entry.display,
                 tooth.index + 1,
                 tooth.fdi or "",
-                SURFACE_LABEL.get(site.surface, site.surface),
+                site.display_label,
                 *[_fmt(getattr(site.get(r), a, None), 2)
                   for r in ("cej", "cej2", "ac", "apex") for a in ("x", "y")],
                 _fmt(m.root_length, 2) if m else "",
@@ -194,6 +229,8 @@ def site_rows(project: Project, cfg: GradingConfig,
                 "★" if site is res.worst_site else "",
                 "是" if site.skipped else "",
                 _warn_text(m),
+                *_box_values(tooth),
+                *_point_provenance(site),
             ])
     return rows
 
@@ -211,9 +248,11 @@ def export_csv(project: Project, cfg: GradingConfig, out_dir: Path | None = None
     out_dir = out_dir or project.exports_dir
     p1 = out_dir / "summary.csv"
     p2 = out_dir / "sites.csv"
+    p3 = out_dir / "boxes.csv"
     write_csv(p1, SUMMARY_HEADER, summary_rows(project, cfg))
     write_csv(p2, SITES_HEADER, site_rows(project, cfg))
-    return [p1, p2]
+    write_csv(p3, BOXES_HEADER, box_rows(project))
+    return [p1, p2, p3]
 
 
 def export_excel(project: Project, cfg: GradingConfig, out_path: Path | None = None) -> Path:
@@ -232,6 +271,7 @@ def export_excel(project: Project, cfg: GradingConfig, out_path: Path | None = N
     for title, header, rows in (
         ("患者级汇总", SUMMARY_HEADER, summary_rows(project, cfg)),
         ("位点级明细", SITES_HEADER, site_rows(project, cfg)),
+        ("牙框坐标", BOXES_HEADER, box_rows(project)),
     ):
         ws = wb.create_sheet(title)
         ws.append(header)
@@ -267,12 +307,15 @@ def export_single_json(project: Project, entry: CaseEntry, out_path: Path) -> Pa
         "schema_version": SCHEMA_VERSION,
         "worst_ratio": _fmt(res.worst_ratio),
         "worst_tooth": res.worst_tooth.name if res.worst_tooth else None,
-        "worst_surface": res.worst_site.surface if res.worst_site else None,
+        "worst_surface": res.worst_site.surface if res.worst_site and res.worst_site.side_confirmed else None,
+        "worst_surface_display": res.worst_site.display_label if res.worst_site else None,
+        "worst_image_side": res.worst_site.image_side if res.worst_site else None,
         "bone_loss_age_ratio": _fmt(res.bone_loss_age_ratio, 6),
         "interval_2018": interval_text(res.interval, project.grading),
         "_interval_note": "仅为影像学骨吸收范围区间，非 Stage 分期结论。"
                           "分期分级需结合临床资料由医生判断。",
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    from .storage import write_json_atomic
+    write_json_atomic(out_path, d)
     return out_path

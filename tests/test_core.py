@@ -321,7 +321,8 @@ def test_roundtrip() -> None:
         }],
     }
     new = migrate(old)
-    check("迁移：版本升到 3", new["schema_version"] == 3)
+    from app.core.models import SCHEMA_VERSION
+    check("迁移：版本升到当前 schema", new["schema_version"] == SCHEMA_VERSION)
     check("迁移：根尖复制到近中", new["teeth"][0]["sites"][0]["apex"] == {"x": 10, "y": 20})
     check("迁移：根尖复制到远中", new["teeth"][0]["sites"][1]["apex"] == {"x": 10, "y": 20})
     # v1 里的 cej2 就是 CEJ 下 2mm，与 v3 含义一致 —— 必须原样保留
