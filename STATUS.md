@@ -1,5 +1,21 @@
 # STATUS — 2026-09-07
 
+## 1.3 统一版交付完成
+
+- 用户要求合并为一个版本；默认空白抓手，不自动恢复项目或运行模型。自动分割和自动标注为两个独立按钮。
+- 分割只产牙框与完整轮廓；标注仅使用当前牙框快照，严格核对图像/快照SHA与全部牙ID、框、轮廓、牙位和来源，不重新分割、不新增或移动牙框。无轮廓手工框可识别真实候选但不造分割线。
+- 原近中/远中各四点与四公式不变；应标点全齐或明确跳过后自动下一牙，拖点不跳，最后停留“完成标定”。
+- CSV恢复summary/sites两个表、Excel恢复患者汇总/位点明细两表；JSON仅当前标注点及身份/计算结果，均不导出框四角、轮廓、raw/历史候选。完整项目内部几何和撤销记录仍保留。
+- 77项组合回归、原core/smoke全部通过；历史真实模型结果经core载入UI后真实鼠标编辑、保存重开及仅点导出29项通过（reports/unified-ui-v13.local，不称新QProcess推理）。独立审查修复了raw边缘1e-4px容差契约。
+- 独立keypoints真实运行：31牙身份/顺序/几何完全不变，23组69点覆盖15牙；0次分割、0次Torch导入，墙钟90.78秒/峰值0.791GiB。30牙保留轮廓，1牙仅移除轮廓验证无轮廓输入契约，非人工医学真值。后端28项通过，训练0步。
+- 新GUI与Worker已冻结构建，源包105文件。真实原生双按钮、手工八点、拖点不跳步、完成一牙自动下一牙、保存与菜单三格式导出已通过。目录版实际QProcess得到31牙/0分割标点；随后单独识别、保留原31框/轮廓和8人工点，补入60候选点，最终68点、导出16牙22邻面行。`reports/unified-native-v13/verification.json`独立文件核验176项全部通过；UI操作与截图见同目录native-observations.json。没有训练，不把工程手工点当临床真值。
+- 已安装1.3.0-preview，2,535安装文件与实测目录版逐项SHA/大小一致；净PATH默认建窗1.45秒、workflow=unified/startup=blank，Worker模型SHA/CPU算子/ORT健康通过。另以实际安装exe无参数启动观察空白抓手与两个按钮，正常AltF4退出，CIM无相关GUI/Worker进程；截图`reports/packaging-v1.3/installed-blank-start.png`。
+- 唯一安装包`dist/AI-integrated/牙槽骨吸收测量_安装包_v1.3.0-preview.exe`，446,489,824字节；SHA256 `6095fdedd941403ccdb7abc57be2bede23c17d97efe9682cf3eb13c9f53fa802`。唯一桌面与开始菜单程序入口“牙槽骨吸收测量”，无mode参数；只剩1.3安装注册。SOURCE已提交5aef185。
+- 已清除QSettings的last_project键，未恢复旧病例或QA项目路径；程序保留布局设置，正常启动仍空白。证据`reports/packaging-v1.3/settings-cleanup.json`。
+- 用户明确允许旧病例清理：旧1.0官方卸载exit0；旧病例1031文件/268645342字节及7项多余旧安装包/构建产物已移入回收站，原位置均不存在。自动审批曾拒绝永久删除命令（仅返回blocked by policy，未给具体原因，未执行），故采用更安全可恢复清理，未永久擦除或清空回收站。保留原始开发附件、模型、源码、当前包与QA材料。证据`reports/packaging-v1.3/legacy-cases-recycled.json`、`obsolete-artifact-cleanup.json`、`verification-summary.json`。不能把下方1.2“旧病例保留”当本轮约束。
+
+以下为1.2历史记录；其两入口、导出框角等行为由上述1.3需求覆盖。
+
 ## 1.2 本轮交付完成
 
 - 同一源码两入口：`--annotation-mode manual`（默认，只分割、人工四点）和 `full`（分割、轮廓约束三点候选）。四点与四公式未变。

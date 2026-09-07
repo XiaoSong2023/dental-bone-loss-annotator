@@ -1,43 +1,50 @@
 # HANDOFF — 2026-09-07
 
-## 当前交付
+## 当前状态
 
-1.2.0-preview 已构建、原位安装并完成验收。用户要的两种入口共用原UI：桌面“牙槽骨吸收测量AI”运行full，桌面“牙槽骨吸收测量（分割人工版）”运行manual。直接打开exe默认manual。原手工1.0保留。不要重新生成开发规划、再索要已确认缺失的原项目权重或Mac环境。
+1.3.0-preview统一版已交付，产品代码已定稿、测试与目录原生双按钮验收通过，已安装并清理多余版本；最终证据见本文件末尾及STATUS。不要重做开发规划或重新询问Mac、权重、是否可清理旧病例。
 
-本目录是最终UI工程；原任务书、购买源码、权重审计及模型后端在相邻 `0907牙周全景片分割及标注系统开发/panodental`。最新功能说明见 `docs/CONTOUR_REVIEW.md` 与 `packaging/distribution/使用说明.md`；历史验收保留在STATUS.md后半。
+用户最新要求优先于1.2：只保留一个软件；空白抓手启动，不自动打开项目；自动分割与自动标注分别主动点击；原四点/四公式、逐牙手工标定、保存导出；导出不含矩形四角。用户已另行明确允许旧版病例清理。
 
-本轮不训练、不改模型权重、不降阈值、不编造点。真实样片仍31牙；完整自动模式由17组三点/11牙改善到23组69点/15牙，16牙仍无完整组。UI按图像半侧保留20组60点，其余原始候选保存在run结果。轮廓残差最大1.14e-13px仅证明几何贴线，不证明CEJ或真正骨嵴顶准确，尤其骨嵴顶不一定在牙齿边界。不得把全景片裁剪称为真实根尖片，也不得把QA人工点作医学标注真值。
+## 关键契约
 
-## 功能与代码契约
+- GUI `app/main.py`唯一入口，不以manual/full区分软件；历史annotation-mode参数仅兼容忽略。selftest输出workflow=unified、startup=blank。MainWindow不调度_restore_last_project，QSettings只恢复窗口/面板布局。
+- `main_window.py`的start_auto_segmentation只运行segmentation，start_auto_annotation只运行keypoints；无牙框时后者禁用。两个按钮不串联、不自动触发。UI主线程不加载模型。
+- `ai_client.py`/`ai_worker.py`传递 `--mode segmentation|keypoints` 与keypoints所需 `--teeth <snapshot>`。后端CLI保留full用于旧数据对照，但GUI没有合并执行入口。
+- teeth.json：schema_version=1，image的width/height/sha256，teeth数组的source_tooth_id=instance_id=UI tooth_id、fdi、origin、现有seg.score或null、当前bbox_xyxy、现有contours或空。UI保存原灰度PNG与快照SHA；完成时同时核对PNG、快照字节、后端teeth_source.sha256与当前选牙集合。每颗输入牙必须在输出中保留，即便surfaces为空。
+- 后端 `analyze_image(..., mode='keypoints', teeth_path=...)`只加载pose/ORT，不校验或加载分割权重，不导入Torch。snapshot校验后，只把轮廓或人工矩形栅格用作内部候选归属。人工框的矩形不是牙齿轮廓，不能输出假mask/score。models.segmentation=null、segmentation.forward_count=0。
+- `ai_merge.py`keypoints按精确source_tooth_id合并并核对全部原框/轮廓/牙位/来源/score；只填点，不做IoU配牙、不新增牙或改segmentation/initial_auto_roi。segmentation结果含surfaces会拒绝。原手工/复核/拒绝点保护不变。
+- 后端raw_xy保留原回映数值，允许解码契约的1e-4px边缘舍入；当前显示xy仍必须在原图范围。此兼容由726455d修复并回归验证。
+- 有轮廓的候选精确投影至最近闭合线段，原值/校正值/投影距离各存；无轮廓点projected_xy与boundary_projection为null，xy/raw保持模型预测。不降低阈值、不编造缺点、不把贴线等同于医学准确。
+- 近中/远中各cej、cej2、ac、apex四点、四公式不变。ToothDialog填点/明确跳过后扫描本牙所有空位；未齐不跳下一牙，补齐自动下一牙，最后停留完成标定。拖动不跳牙，撤销能回到被编辑牙。
+- 抓手H、T手工框、中键/触控板平移、重叠牙框A/B选择、框替换与持久Ctrl+Z撤销保留。Qt PointItem必须继续用QObject成员Slot，不能恢复强捕获view闭包导致销毁后崩溃。
+- 项目内部schema5仍保存完整geometry、raw和history；用户CSV只summary.csv/sites.csv，Excel只患者汇总/位点明细，JSON只当前位点、身份及派生结果，无roi/roi_corners/segmentation/candidate_surfaces/point_meta/ai_runs/box_history/骨曲线。未标点牙不导出；原有公式列保留。识别出的旧版boxes.csv会在重导CSV时清理，其他自有文件不动。
 
-- 原四点cej、cej2、ac、apex及四公式不变。纯分割模式不加载ORT/pose权重、不产生候选点，双击机器牙框直接进入原四点手工对话框。历史已存标点不会被切换入口删除。
-- 两模式共享整图/局部抓手H、左键自由平移、中键或Ctrl/空格平移、触控板pixelDelta水平平移；普通垂直滚轮仍缩放。点仍可拖动。单框双击直入；重叠处异步QMenu列出A/B/C…与取消，选中后进入对应牙位。
-- T画框；与单个已有ROI对应时直接替换，与多个对应时选要替换的牙框，无对应时沿用新牙位录入。保留牙齿身份与原标点。Ctrl+Z/撤销框选恢复最近框，历史保存后可重开继续撤销；initial_auto_roi保留机器初始框。没有把撤销框选做成删除人工点。
-- `app/main.py --annotation-mode manual|full`；类MainWindow默认full只为兼容原API/tests。`main_window.py`绑定病例与进度/取消/事务合并/保存，manual结果必须mode=segmentation且surfaces为空。
-- `ai_client.py`通过QProcess调用独立 `app/ai_worker.py --mode full|segmentation`；开发态后端用相邻3.11 Python，安装态runtime/PanoDentalWorker.exe；GUI3.14不装Torch。
-- 后端 `analyze_image(image_path, model_dir, output_dir, progress=None, cancelled=None, mode='full')`。首次分割boxes/contours/class/score与旧baseline完全一致。full把跨ROI候选归属实际牙齿、空间去重，缺失牙最多原向/180度/加宽原向三视图；阈值不变。output_dir必须不存在，raw mask/pose/变换完整落盘。
-- `app/core/review_geometry.py`与后端boundary.py按原始闭合轮廓线段做连续最近点投影。保留raw_xy、pre_projection_xy、projected_xy及投影距离/线段/t/轮廓SHA，不把投影当人工复核。main_window对未人工改动旧候选同样可做轮廓校正；人工修改、复核或拒绝的点受保护。
-- `ai_merge.py`一对一匹配牙框；手工大幅重画时仍用原分割bbox辅助匹配，避免重跑重复牙齿。模型cej→cej、bone_level→ac、apex→apex；cej2不得自动伪造。图像左右是image_side，不能擅自确认为解剖近远中。
-- `models.py` schema5：Pt、Site.point_meta、Tooth.segmentation/candidate_surfaces/initial_auto_roi、CaseAnnotation.ai_runs/box_history。storage原子保存，迁移旧数据并拒绝未来schema。坐标保留浮点，四角动态导出；JSON roi_corners、CSV boxes.csv、Excel牙框坐标包括尚未打点的牙框。
-- Qt生命周期修复7e9f881：PointItem信号连接QObject成员Slot，关联信息放annotation_ref，避免lambda强捕获view造成跨Python/Qt销毁后崩溃。拖动仅刷新文字/测量线，不能clear拖动中的Item；不要退回强捕获闭包。
-- 移交完整项目文件夹时包含runs；单JSON坐标导出不是mask二进制项目包。
+## 验证与环境
 
-## 验收证据
+目标GUI `.venv`：Python3.14.3/PySide6 6.11.2。相邻panodental后端 `.venv`：Python3.11.15/Torch2.6 CPU/torchvision0.21/ORT1.23.2。CPU2线程，无训练、无CUDA依赖、无上传/云GPU。
 
-- 后端 `reports/boundary_full_v1.local` / `boundary_segmentation_v1.local`、`boundary_validation.local.json`：full墙钟72.67秒/峰值1.4835GiB；纯分割墙钟16.81秒，31牙0点/0pose。以上是后端真实模型运行。
-- UI `reports/boundary_ui_v12_final.local/report.json`：真实结果重放29断言，60显示点贴线、raw不丢、真实QTest拖点、保存重开、重画撤销、CSV/Excel/JSON及四角。它没有重复推理，不能称完整QProcess运行。
-- `reports/v12-native/report.json`：实际冻结目录GUI→冻结QProcess纯分割12.74秒/1.484GiB，31牙0自动点；人工四点和拖点、抓手、重画/撤销、重叠框选择与正常保存退出，45产物断言。人工四点仅工程测试，未导入用户项目。
-- 原core/smoke通过，新增AI/几何/模式/导航组合44 passed；随后测试销毁等待器去除pytest-qt警告，相关29项无警告通过。后端12项通过。无需无故重复昂贵推理。
-- `reports/packaging-v1.2/verification-summary.json`：2535安装文件与实测目录bundle大小/SHA全匹配，四桌面/菜单快捷方式参数正确，安装版净PATH三入口分别默认manual1.92s/manual1.35s/full1.32s成功，Worker CPU NMS/ROIAlign/ORT/两权重SHA全部通过。
-- 包 `dist/AI-integrated/牙槽骨吸收测量AI_安装包_v1.2.0-preview.exe`，446458634字节，SHA256 `9e606bb1d25723568ef37b1ee7a7f7ab2a60b79aa3060b1b271ca40103f3f6cc`。
-- 安装目录 `C:/Users/Lenovo/AppData/Local/Programs/牙槽骨吸收测量AI`。原用户窗口已正常保存/关闭；原手工1.0与用户项目未移动删除。测试都在reports独立项目，最终last_project恢复真实用户项目，见settings-restored.json（before-native快照是更早QA遗留偏好，不要误恢复它）。没有构建/训练/推理后台进程。
+77项组合回归：test_ai_core、test_ai_ui、test_review_geometry、test_workflow_modes、test_canvas_navigation、test_keypoint_merge、test_ai_keypoints_protocol、test_tooth_progression；原test_core/test_smoke全部通过。后端28项通过。
 
-## 环境、构建与后续
+`reports/unified-ui-v13.local/report.json`为历史真实full结果经core载入→UI真实鼠标编辑/保存重开/仅点导出29断言。该脚本不模拟新的UI操作完成、不重跑模型，不能称QProcess推理。
 
-GUI `.venv/Scripts/python.exe -m app.main`，Python3.14.3/PySide6 6.11.2。后端相邻panodental/.venv为Python3.11.15/Torch2.6 CPU/torchvision0.21/ORT1.23.2。Ryzen7 6800H、16GB、AMD显卡，无CUDA，当前推理2线程。CPU环境重装用 `uv sync --locked --extra dev --extra cpu --extra weight-audit`，只uv sync会移除extras。
+`reports/unified-native-v13/native-observations.json`记录最终冻结目录GUI真实操作：空白抓手启动，载入影像不推理，分割按钮得到31牙框/轮廓0点；双击FDI16手工近远中八点，拖动不跳步，完成本牙自动从23/31至24/31，点击完成标定。随后单独标注按钮启动冻结Worker的keypoints模式，保留全部原框/轮廓/identity和8人工点，补60候选点。实际菜单导出CSV/Excel/JSON、正常关闭。`verification.json`由只读verify_native.py作176项全通过核验，最终68点、16导出牙、22邻面行；CSV仅2文件、Excel2表、JSON无几何/raw/meta且当前坐标精确匹配。测试项目独立于待删除旧病例；手工点只验证交互，不作解剖真值。
 
-GUI测试用 `.venv/Scripts/python.exe -m pytest tests/test_ai_core.py tests/test_ai_ui.py tests/test_review_geometry.py tests/test_workflow_modes.py tests/test_canvas_navigation.py -q`，原测试单独运行 `python tests/test_core.py`、`python tests/test_smoke.py`。pytest8.4.2、pytest-qt4.5仅开发依赖，不进入安装包。
+后端 `reports/keypoints_only_v1.report.json`为一次真实keypoints模型运行；31牙输入身份/几何不变，23组三点69点覆盖15牙，0seg/0Torch，90.78秒/0.791GiB。30牙有轮廓，FDI36仅去轮廓作为契约工程测试，真实2组6点未约束，不是专家真值。正式全景片医学准确率/每牙齐点仍未保证。
 
-打包 `scripts/build_ai_windows.ps1` 的Worker/Gui/Assemble/Installer阶段；先定稿源码，再 `scripts/package_source.py --backend <相邻panodental目录>` 刷新随包SOURCE（本次97文件），再Assemble/Installer。必须保留净PATH、--clean与ICU排除，宿主poppler库会污染Qt；不要回用旧失败DLL/旧包。目标代码提交fc526dd、4383b03、40d6691、7e9f881、a5ba807；后端3d8f529，最终交接文档提交见git log。
+## 打包与清理
 
-尚未达成的医学目标：每牙三点齐全与CEJ/骨嵴顶独立准确率、跨医院/全景片域验证、完整原生PT对ONNX数值对照。后续训练应保存原片、独立mask/轮廓及人工真值，按患者划分训练/验证；只在原图画彩线再训不能保证小样本更准。用户当前优先无需重训的贴线与手工流程，相关工程调整已交付。Mac已取消。每轮继续更新STATUS/HANDOFF，不把尚未验证的医学效果记为完成。
+1.3唯一桌面/StartMenu程序入口“牙槽骨吸收测量”，不传mode。安装仍用AI AppId和 `C:/Users/Lenovo/AppData/Local/Programs/牙槽骨吸收测量AI`，内部exe旧名不代表另一版本。包名 `dist/AI-integrated/牙槽骨吸收测量_安装包_v1.3.0-preview.exe`。
+
+净PATH/--clean/ICU排除必须保留；先定稿→build Worker/Gui→刷新SOURCE→Assemble/health→Installer。SOURCE本轮105源码文件，不含病例、reports、inputs或backups。初始打包b2f38a8、迁移授权1597d3a，后端bf11933、Worker/client8bf80f2、export adfda97、core39c20b4/726455d、UI867f4c5、说明与probe d4b9d26。
+
+清理授权与实情：用户允许清理旧病例；旧1.0官方卸载exit0，新1.3安装验证后，精确旧目录 `C:/Users/Lenovo/AppData/Local/Programs/牙槽骨吸收测量`（1031病例文件268645342bytes）已移入回收站，原路径不存在，带AI后缀的新安装目录保留。永久删除命令被自动审批在执行前拒绝，仅返回blocked by policy未给具体原因；未重试永久删除，改为系统明确SendToRecycleBin的可恢复方式并成功。7项审计过的旧dist安装器/独立程序/构建目录也已回收，旧mode快捷方式已清理。没有清空回收站；不是永久擦除。原始附件、模型、源码、当前包与QA材料保留。不要把早先1.2“恢复last_project/保留1.0病例”的记录当现行要求。
+
+## 最终交付记录
+
+- 1.3.0-preview已安装到上述AI路径；2,535安装资产逐项SHA/大小一致、0缺失0差异。桌面及开始菜单各一个“牙槽骨吸收测量”程序入口，参数为空，注册仅1.3。
+- 最终安装包446,489,824字节，SHA256 `6095fdedd941403ccdb7abc57be2bede23c17d97efe9682cf3eb13c9f53fa802`；源码包105文件，SHA256 `87211c974018d1b6b0fcce7aed148175bcbaf17a5e6dd9959e4523af01ed86d4`，提交5aef185。
+- 安装后净PATH默认自检1.45秒，workflow=unified/startup=blank；冻结CPU Worker的两模型SHA、NMS、ROIAlign、ORT全部通过。父端另用实际已安装exe无参数启动（PID52368）观察空白抓手、空病例列表、两个按钮，再正常AltF4退出；CIM无GUI/Worker。
+- `reports/packaging-v1.3/verification-summary.json`汇总包、安装、健康与清理证据；`installed-blank-start.png`是最终实际窗口；`legacy-cases-recycled.json`、`obsolete-artifact-cleanup.json`记录可恢复清理，均不等于永久删除。
+- `settings-cleanup.json`确认QSettings PerioTools/全景片牙槽骨吸收测量的last_project已清除，未恢复旧病例或QA路径；其他布局设置保留。
+- 目录真实原生验收见上一节native-observations及176项verification。以后从唯一1.3继续迭代，保持两按钮与仅点导出契约；每轮更新STATUS/HANDOFF。
