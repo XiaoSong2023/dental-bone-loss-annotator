@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$WorkerProject = '',
-    [string]$Version = '1.2.0-preview',
+    [string]$Version = '1.3.0-preview',
     [ValidateSet('All', 'Gui', 'Worker', 'Assemble', 'Installer')]
     [string]$Stage = 'All'
 )
@@ -122,10 +122,9 @@ try {
                 bytes = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower() }
         }
         [ordered]@{ version = $Version; platform = 'windows-x64'; device = 'cpu';
-            default_annotation_mode = 'manual';
+            workflow = 'unified';
             entrypoints = @(
-                [ordered]@{ name = '牙槽骨吸收测量AI'; arguments = '--annotation-mode full' },
-                [ordered]@{ name = '牙槽骨吸收测量（分割人工版）'; arguments = '--annotation-mode manual' }
+                [ordered]@{ name = '牙槽骨吸收测量'; arguments = '' }
             );
             built_at_utc = [DateTime]::UtcNow.ToString('o'); files = @($assets) } |
             ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $aiDist 'bundle-manifest.json') -Encoding UTF8
@@ -139,7 +138,7 @@ try {
         $iscc = $isccPaths | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
         if (!$iscc) { throw 'Inno Setup 6 ISCC.exe was not found; no installer was generated.' }
         Invoke-Native $iscc @((Join-Path $taskRoot 'installer_ai.iss'))
-        $installer = Join-Path $aiDist "牙槽骨吸收测量AI_安装包_v$Version.exe"
+        $installer = Join-Path $aiDist "牙槽骨吸收测量_安装包_v$Version.exe"
         Require-File $installer
         Get-FileHash -LiteralPath $installer -Algorithm SHA256 |
             Select-Object Path, Hash | ConvertTo-Json |

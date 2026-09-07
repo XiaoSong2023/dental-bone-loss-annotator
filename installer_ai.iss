@@ -1,9 +1,9 @@
-; One shared installation, two explicit annotation modes. Original manual 1.0 stays intact.
-#define AppName "牙槽骨吸收测量AI"
-#define ManualName "牙槽骨吸收测量（分割人工版）"
+; One unified application. Retain the AI AppId and installation directory for upgrades.
+#define AppName "牙槽骨吸收测量"
+#define InstallDirName "牙槽骨吸收测量AI"
 #define AppVer GetEnv('APP_VERSION')
 #if AppVer == ""
-  #define AppVer "1.2.0-preview"
+  #define AppVer "1.3.0-preview"
 #endif
 #define AppExe "牙槽骨吸收测量AI.exe"
 #define SrcDir "dist\AI-integrated\PanoDentalAI"
@@ -15,9 +15,10 @@ AppVersion={#AppVer}
 AppVerName={#AppName} {#AppVer}
 AppPublisher=牙周研究工具
 DefaultGroupName={#AppName}
+UsePreviousGroup=no
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
-DefaultDirName={autopf}\{#AppName}
+DefaultDirName={autopf}\{#InstallDirName}
 OutputDir=dist\AI-integrated
 OutputBaseFilename={#AppName}_安装包_v{#AppVer}
 Compression=lzma2/fast
@@ -38,17 +39,24 @@ RestartApplications=no
 Name: "chinese"; MessagesFile: "packaging\languages\ChineseSimplified.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "创建自动候选版与分割人工版两个桌面快捷方式"; GroupDescription: "附加任务:"; Flags: checkedonce
+Name: "desktopicon"; Description: "创建牙槽骨吸收测量桌面快捷方式"; GroupDescription: "附加任务:"; Flags: checkedonce
 
 [Files]
 Source: "{#SrcDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Exact obsolete shortcuts only. Never remove an installation/project directory.
+Type: files; Name: "{autodesktop}\牙槽骨吸收测量AI.lnk"
+Type: files; Name: "{autodesktop}\牙槽骨吸收测量（分割人工版）.lnk"
+Type: files; Name: "{autoprograms}\牙槽骨吸收测量AI\牙槽骨吸收测量AI.lnk"
+Type: files; Name: "{autoprograms}\牙槽骨吸收测量AI\牙槽骨吸收测量（分割人工版）.lnk"
+Type: files; Name: "{autoprograms}\牙槽骨吸收测量AI\卸载 牙槽骨吸收测量AI.lnk"
+Type: dirifempty; Name: "{autoprograms}\牙槽骨吸收测量AI"
+
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode full"; WorkingDir: "{app}"; Comment: "自动分割与三点候选，人工复核"
-Name: "{group}\{#ManualName}"; Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode manual"; WorkingDir: "{app}"; Comment: "仅自动分割，人工标注四点"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "牙齿分割、自动候选与手工标注"
 Name: "{group}\卸载 {#AppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode full"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "自动分割与三点候选，人工复核"
-Name: "{autodesktop}\{#ManualName}"; Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode manual"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "仅自动分割，人工标注四点"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "牙齿分割、自动候选与手工标注"
 
 [Run]
-Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode manual"; Description: "立即运行 {#ManualName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Description: "立即运行 {#AppName}"; Flags: nowait postinstall skipifsilent

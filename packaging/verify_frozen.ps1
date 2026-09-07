@@ -25,9 +25,7 @@ try {
     $env:VIRTUAL_ENV = $null
     $env:SELFTEST_QUIET = '1'
     $guiChecks = @(
-        @{ name = 'default'; arguments = '--selftest'; expected_mode = 'manual' },
-        @{ name = 'manual'; arguments = '--selftest --annotation-mode manual'; expected_mode = 'manual' },
-        @{ name = 'full'; arguments = '--selftest --annotation-mode full'; expected_mode = 'full' }
+        @{ name = 'default'; arguments = '--selftest'; expected_workflow = 'unified'; expected_startup = 'blank' }
     )
     $guiResults = @()
     foreach ($check in $guiChecks) {
@@ -43,12 +41,13 @@ try {
         if ($gui.ExitCode -ne 0) { throw "Packaged GUI exited with $($gui.ExitCode) ($($check.name))." }
         $guiResult = Get-Content -LiteralPath $env:SELFTEST_OUT -Raw
         if (!$guiResult.Contains('[selftest] OK')) { throw 'Packaged GUI did not report success.' }
-        $modeToken = 'annotation_mode=' + $check.expected_mode
-        if (!$guiResult.Contains($modeToken)) {
-            throw "Packaged GUI did not confirm expected mode $($check.expected_mode) ($($check.name))."
+        if (!$guiResult.Contains('workflow=' + $check.expected_workflow) -or
+            !$guiResult.Contains('startup=' + $check.expected_startup)) {
+            throw 'Packaged GUI did not confirm the unified workflow and blank startup.'
         }
         $guiResults += [ordered]@{ entry = $check.name; arguments = $check.arguments;
-            annotation_mode = $check.expected_mode; exit_code = $gui.ExitCode; report = $env:SELFTEST_OUT }
+            workflow = $check.expected_workflow; startup = $check.expected_startup;
+            exit_code = $gui.ExitCode; report = $env:SELFTEST_OUT }
         Write-Output $guiResult
     }
 
@@ -76,7 +75,7 @@ try {
         gui_executable = $guiPath
         worker_executable = $workerPath
         gui_exit_code = $gui.ExitCode
-        gui_modes = $guiResults
+        gui_entrypoints = $guiResults
         worker_exit_code = $worker.ExitCode
         launch_directory = $ReportDirectory
         path_during_test = $env:PATH
