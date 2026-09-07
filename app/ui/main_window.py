@@ -43,6 +43,8 @@ from ..core import export as exporter
 from ..core import roster as roster_mod
 from ..core.formula import FORMULAS, choices as formula_choices, get as get_formula
 from ..core.models import CaseAnnotation, Pt, Tooth
+from ..core.review_geometry import (constrain_pending_candidates, replacement_candidates,
+                                   edit_box, undo_box, can_undo_box)
 from ..core.project import (
     MODE_LABEL,
     MODE_PERIAPICAL,
@@ -59,7 +61,7 @@ from . import theme as T
 from .ai_client import AiClient
 from .case_panel import CasePanel
 from .inspector_panel import InspectorPanel
-from .panorama_view import MODE_PICK, MODE_VIEW, PanoramaView
+from .panorama_view import MODE_PICK, MODE_VIEW, MODE_HAND, PanoramaView
 from .settings_dialog import SettingsDialog
 from .tooth_dialog import ToothDialog
 
@@ -70,9 +72,13 @@ APP_TITLE = "牙槽骨吸收测量"
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, annotation_mode="full"):
         super().__init__()
-        self.setWindowTitle(APP_TITLE)
+        if annotation_mode not in ("full", "manual"):
+            raise ValueError("未知标注工作模式")
+        self.annotation_mode = annotation_mode
+        self._mode_title = APP_TITLE + (" · 分割人工版" if annotation_mode == "manual" else " · 自动候选版")
+        self.setWindowTitle(self._mode_title)
         self.resize(1560, 940)
 
         self.project: Project | None = None
@@ -114,6 +120,7 @@ class MainWindow(QMainWindow):
 
         self.view = PanoramaView()
         self.view.box_drawn.connect(self._on_box_drawn)
+        self.view.tooth_activated.connect(self.start_annotation)
         self.view.point_dragged.connect(self._on_point_dragged)
         self.view.moved.connect(self._on_mouse_moved)
 
@@ -145,6 +152,10 @@ class MainWindow(QMainWindow):
     # ══ 菜单 ════════════════════════════════════════════════════════
     def _build_menus(self) -> None:
         m = self.menuBar()
+        edit_menu = m.addMenu("编辑(&E)")
+        self.act_undo_box = self._act(edit_menu, "撤销框选", self.undo_box_edit, "Ctrl+Z")
+        self.act_snap = self._act(edit_menu, "候选点贴合牙齿轮廓", self.snap_candidates)
+        self.act_snap.setVisible(self.annotation_mode == "full")
 
         fm = m.addMenu("项目(&P)")
         self._act(fm, "新建项目…", self.new_project, "Ctrl+N")
@@ -250,20 +261,29 @@ class MainWindow(QMainWindow):
         bot.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.addToolBar(Qt.ToolBarArea.BottomToolBarArea, bot)
 
+        self.btn_hand = QToolButton()
+        self.btn_hand.setText("抓手  (H)")
+        self.btn_hand.setCheckable(True)
+        self.btn_hand.setToolTip("左键拖动平移；中键拖动、触控板双指滑动也可平移；双击牙框放大标注")
+        self.btn_hand.toggled.connect(self._toggle_hand)
+        bot.addWidget(self.btn_hand)
         self.btn_pick = QToolButton()
         self.btn_pick.setText("画框选牙  (T)")
         self.btn_pick.setCheckable(True)
         self.btn_pick.setToolTip("拖出方框把可疑牙位框住，务必含牙冠 + 牙根 + 根尖；四角原图坐标随标注保存、导出")
         self.btn_pick.toggled.connect(self._toggle_pick)
         bot.addWidget(self.btn_pick)
+        bot.addAction(self.act_undo_box)
+        self._set_view_tool(MODE_HAND)
 
         self.btn_annotate = QToolButton()
         self.btn_annotate.setText("开始标定  (Enter)")
         self.btn_annotate.clicked.connect(self.start_annotation)
         bot.addWidget(self.btn_annotate)
         self.btn_auto = QToolButton()
-        self.btn_auto.setText("自动分割与三点")
-        self.btn_auto.setToolTip("自动生成牙齿轮廓及 CEJ、牙槽嵴顶、根尖候选点；完成后可拖动复核")
+        self.btn_auto.setText("自动分割牙齿" if self.annotation_mode == "manual" else "自动分割与三点")
+        self.btn_auto.setToolTip("仅自动分割牙齿，双击牙框后手工标四点" if self.annotation_mode == "manual"
+            else "分割牙齿并生成贴合轮廓的三点候选；贴线只作几何校正，仍需复核解剖位置")
         self.btn_auto.clicked.connect(self.start_auto_annotation)
         bot.addWidget(self.btn_auto)
         self.btn_cancel_auto = QToolButton()
@@ -371,6 +391,7 @@ class MainWindow(QMainWindow):
     def _build_shortcuts(self) -> None:
         for text, slot, key in (
             ("pick", lambda: self.btn_pick.toggle(), "T"),
+            ("hand", lambda: self._set_view_tool(MODE_HAND), "H"),
             ("annotate", self.start_annotation, "Return"),
             ("flag", self.toggle_flag, "F"),
             ("finish", self.finish_case, "Ctrl+Return"),
@@ -429,7 +450,7 @@ class MainWindow(QMainWindow):
         self.cases.set_project(project)
         self._sync_formula_widgets(project.settings.formula_id)
         self._sync_mode_widget(project.settings.mode)
-        self.setWindowTitle(f"{APP_TITLE} — {project.root}")
+        self.setWindowTitle(f"{self._mode_title} — {project.root}")
         QSettings(ORG, APP).setValue("last_project", str(project.root))
         self._update_enabled()
         first = project.next_unfinished()
@@ -544,9 +565,8 @@ class MainWindow(QMainWindow):
 
         self._refresh_all(reset_view=True)
         self._update_enabled()
-        self.btn_pick.setChecked(True)          # 打开即进入画框选牙
-        self._toggle_pick(True)
-        self._set_hint(self._pick_hint())
+        self._set_view_tool(MODE_HAND)
+        self._set_hint("可自动分割牙齿；双击牙框放大标注，抓手拖动看片，按 T 手工重画牙框。")
 
     def _refresh_all(self, reset_view: bool = False) -> None:
         if self.ann is None or self._gray is None:
@@ -858,7 +878,10 @@ class MainWindow(QMainWindow):
             self.btn_pick.setChecked(False)
             self._update_enabled()
             self._set_hint("正在载入模型并自动分割牙齿…")
-            self._ai.start(input_path, run_dir / "output")
+            if self.annotation_mode == "manual":
+                self._ai.start(input_path, run_dir / "output", mode="segmentation")
+            else:
+                self._ai.start(input_path, run_dir / "output")
         except (OSError, RuntimeError) as exc:
             self._ai_failed(str(exc))
 
@@ -894,23 +917,32 @@ class MainWindow(QMainWindow):
                 raise ValueError("自动结果与本次输入图像的 SHA256 不一致，已拒绝应用")
             if image.get("coordinate_space") != "canonical_image_pixel_centers":
                 raise ValueError("自动结果的坐标空间不受支持，已拒绝应用")
+            if self.annotation_mode == "manual" and (result.get("mode") != "segmentation"
+                    or any(t.get("surfaces") for t in result.get("teeth", []))):
+                raise ValueError("人工版只接受无自动点的牙齿分割结果")
             result["result_ref"] = Path(result_path).relative_to(project.root).as_posix()
             result["source_case"] = {"image": entry.image, "sha1": entry.sha1}
             result["analysis_input"] = {"sha256": input_sha256, "preconversion": preconversion,
                                         "display_adjust_used": False,
                                         "input_ref": input_path.relative_to(project.root).as_posix()}
             summary = merge_ai_result(ann, result)
+            if self.annotation_mode == "full":
+                constrain_pending_candidates(ann)
             if (summary["added_teeth"] or summary["points_added"]) and entry.status != STATUS_FLAGGED:
                 project.set_status(entry, STATUS_IN_PROGRESS)
             self._mark_dirty()
             self.save_current(silent=True)
             self._refresh_all()
-            self._set_hint(
-                f"自动标注已保存：新增 {summary['added_teeth']} 颗牙，"
-                f"补入 {summary['points_added']} 个候选点；"
-                f"{summary['teeth_without_points']} 颗牙未检出三点。"
-                "可直接拖动候选，或按 Enter 放大复核侧别与补点。"
-            )
+            if self.annotation_mode == "manual":
+                self._set_hint(f"分割已保存：{summary['added_teeth'] + summary['matched_teeth']} 颗牙。"
+                    "双击牙框直接放大，手工标注原有四点；按 T 可重画牙框，Ctrl+Z 撤销框选。")
+            else:
+                self._set_hint(
+                    f"自动标注已保存：新增 {summary['added_teeth']} 颗牙，"
+                    f"补入 {summary['points_added']} 个候选点；"
+                    f"{summary['teeth_without_points']} 颗牙未检出三点。"
+                    "候选已贴合牙齿轮廓，解剖位置仍需复核；双击牙框补点。"
+                )
         except Exception as exc:
             self._ai_failed(f"自动结果无法应用：{exc}")
             return
@@ -926,20 +958,46 @@ class MainWindow(QMainWindow):
         self._set_hint("已取消自动标注，现有人工标注保持原样")
 
     def _toggle_pick(self, on: bool) -> None:
-        self.view.set_mode(MODE_PICK if on else MODE_VIEW)
-        if not on:
-            self.view.cancel_box()
-        self._set_hint(self._pick_hint() if on else "")
+        self._set_view_tool(MODE_PICK if on else MODE_HAND)
+
+    def _toggle_hand(self, on: bool) -> None:
+        self._set_view_tool(MODE_HAND if on else MODE_VIEW)
+
+    def _set_view_tool(self, mode: str) -> None:
+        for button, active in ((self.btn_pick, mode == MODE_PICK), (self.btn_hand, mode == MODE_HAND)):
+            button.blockSignals(True)
+            button.setChecked(active)
+            button.blockSignals(False)
+        self.view.cancel_box()
+        self.view.set_mode(mode)
+        self._set_hint(self._pick_hint() if mode == MODE_PICK else "抓手拖动看片；双击牙框放大标注。")
 
     def _pick_hint(self) -> str:
         n = len(self.ann.teeth) if self.ann else 0
         base = "画框选牙：拖出方框把整颗牙框住（务必含牙冠 + 牙根 + 根尖）。"
-        return base + ("　框 2–3 颗即可。" if n == 0
-                       else f"　已框 {n} 颗，按 Enter 开始逐颗放大标点。")
+        return base + f"　已有 {n} 颗；重画覆盖旧框，Ctrl+Z 撤销框选。"
 
     def _on_box_drawn(self, rect) -> None:
-        """画框选牙 —— 框由你手画，所以「根尖不会被切掉」由你直接保证。"""
-        if self.ann is None or self._gray is None:
+        """Replace a related rectangle while preserving tooth identity and all points."""
+        if self._ai_busy or self.ann is None or self._gray is None:
+            return
+        roi = (rect.x(), rect.y(), rect.width(), rect.height())
+        candidates = replacement_candidates(self.ann, roi)
+        target = candidates[0] if len(candidates) == 1 else None
+        if len(candidates) > 1:
+            menu = QMenu(self)
+            original_ann = self.ann
+            for i, candidate in enumerate(candidates):
+                action = menu.addAction(f"替换方框 {chr(65+i) if i < 26 else i+1} · 牙位 {candidate.name}")
+                action.triggered.connect(lambda _checked=False, t=candidate:
+                    self._replace_drawn_box(original_ann, roi, t))
+            menu.addSeparator()
+            menu.addAction("取消")
+            menu.aboutToHide.connect(menu.deleteLater)
+            menu.popup(self.view.mapToGlobal(self.view.rect().center()))
+            return
+        if target is not None:
+            self._replace_drawn_box(self.ann, roi, target)
             return
         h, w = self._gray.shape[:2]
         c = rect.center()
@@ -952,23 +1010,45 @@ class MainWindow(QMainWindow):
         )
         if not ok:
             return
-        self.ann.add_tooth(fdi=fdi,
-                           roi=(rect.x(), rect.y(), rect.width(), rect.height()))
+        edit_box(self.ann, roi, fdi=fdi)
+        self._box_edit_finished(self._pick_hint())
+
+    def _replace_drawn_box(self, original_ann, roi, target) -> None:
+        if self._ai_busy or self.ann is not original_ann or target not in self.ann.teeth:
+            return
+        edit_box(self.ann, roi, target)
+        self._box_edit_finished(f"已替换牙位 {target.name} 的框，原有标点保留；Ctrl+Z 可找回原框。")
+
+    def _box_edit_finished(self, hint: str) -> None:
         self._mark_dirty()
+        self.save_current(silent=True)
         self._refresh_all()
-        self._set_hint(self._pick_hint())
+        self._update_enabled()
+        self._set_hint(hint)
+
+    def undo_box_edit(self) -> None:
+        if self.ann is not None and not self._ai_busy and undo_box(self.ann):
+            self._box_edit_finished("已撤销上一次框选；标点保留，四角坐标已更新。")
+
+    def snap_candidates(self) -> None:
+        if self.ann is None or self._ai_busy or self.annotation_mode != "full":
+            return
+        stats = constrain_pending_candidates(self.ann)
+        self._box_edit_finished(f"已将 {stats['projected']} 个未修改候选贴合轮廓，"
+            f"最大移动 {stats['max_distance_px']:.1f} 像素；{stats['missing_contour']} 个缺轮廓未移动。"
+            "手工点保持原样；贴线结果仍需复核。")
 
     def _occlusal_y(self) -> float:
         """咬合平面的粗略高度，只用于推测牙位号的上下颌归属。"""
         return (self._gray.shape[0] / 2) if self._gray is not None else 0.0
 
-    def start_annotation(self) -> None:
-        if self.ann is None or self._gray is None:
+    def start_annotation(self, tooth=None) -> None:
+        if self._ai_busy or self.ann is None or self._gray is None:
             return
         if not self.ann.teeth:
             QMessageBox.information(
                 self, "先画框选牙",
-                "请先点击「自动分割与三点」，或按 T 手动画框选择牙位。\n\n"
+                "请先点击自动分割按钮，或按 T 手动画框选择牙位。\n\n"
                 "画框时务必把整颗牙框进去（牙冠 + 牙根 + 根尖），放大标点时才不会缺根尖。",
             )
             return
@@ -977,6 +1057,8 @@ class MainWindow(QMainWindow):
             get_formula(self.ann.formula_id),
             self.project.grading.formula_config(), self,
         )
+        if isinstance(tooth, Tooth) and tooth in self.ann.teeth:
+            dlg._goto_tooth(self.ann.teeth.index(tooth))
         if dlg.exec():
             self._mark_dirty()
             self.save_current(silent=True)
@@ -1158,9 +1240,11 @@ class MainWindow(QMainWindow):
             a.setEnabled(has_proj)
         for a in (self.act_save, self.act_json):
             a.setEnabled(has_case)
-        for w in (self.btn_pick, self.btn_annotate, self.btn_done, self.btn_flag):
+        for w in (self.btn_pick, self.btn_hand, self.btn_annotate, self.btn_done, self.btn_flag):
             w.setEnabled(has_case)
         self.btn_auto.setEnabled(has_case and self._gray is not None)
+        self.act_undo_box.setEnabled(has_case and can_undo_box(self.ann))
+        self.act_snap.setEnabled(has_case and self.annotation_mode == "full")
         self.btn_cancel_auto.setVisible(self._ai_busy)
         self.btn_cancel_auto.setEnabled(self._ai_busy)
         self.splitter.setEnabled(available)
@@ -1228,7 +1312,11 @@ HELP_TEXT = """\
    · 按文件名自然排序：1, 2, 10 而不是 1, 10, 2
 3. 项目 → 导入名册，一次性带入全部年龄
 4. 点击「自动分割与三点」生成牙齿轮廓和 CEJ / AC / 根尖候选。
+   分割人工版只分割牙齿，不自动打点。双击牙框直接进入四点标定。
+   自动候选版将模型点投影到牙齿轮廓，贴线不等于解剖位置已准确。
+   编辑 → 候选点贴合牙齿轮廓，可校正旧项目中未人工修改的候选。
    也可按 T 手工画框；方框四角原图坐标会保存并一并导出。
+   重画会替换对应旧框；重叠多框需选择。Ctrl+Z 撤销框选，重开仍有效。
 5. 自动候选带「候」标记，直接拖动调整，或 Enter 放大复核。
    模型的图像左/右需要在放大窗口确认近中/远中；牙位号也可修改。
    每侧保留 CEJ / CEJ下2mm / AC / 根尖四个手工点位，两侧共8点。
@@ -1246,15 +1334,17 @@ HELP_TEXT = """\
    ⚠ 软件只给数值与区间，不下 Stage/Grade 结论 —— 分期分级需结合临床。
 
 【快捷键】
-   T              画框选牙 / 浏览 切换
+   T              画框选牙 / 抓手 切换       H  抓手工具
+   Ctrl+Z         撤销框选（不删除后来标的点）
    Esc            取消正在画的框
    Enter          开始标定
    Ctrl+Enter     完成本例并下一张
    F              标记存疑          Ctrl+B  收起 / 展开左栏
    Ctrl+←/→       上一张 / 下一张
    Ctrl+S         保存              Ctrl+0  适配窗口
-   滚轮           缩放              中键拖/空格拖  平移
-   双击           适配窗口
+   滚轮           缩放              中键拖/抓手左键拖  平移
+   触控板双指     水平/垂直平移
+   双击牙框       单牙直接放大；重叠牙框选择 A/B/取消
 
 【标定对话框内】
    空格           下一个点 / 下一颗牙

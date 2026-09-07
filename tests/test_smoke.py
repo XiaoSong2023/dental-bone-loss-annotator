@@ -323,7 +323,7 @@ def main() -> int:
 
         win.open_case(proj.find("1"), force=True)
         check("打开病例", win.ann is not None and win._gray is not None)
-        check("打开即进入画框模式", win.btn_pick.isChecked())
+        check("打开即进入抓手模式", win.btn_hand.isChecked() and not win.btn_pick.isChecked())
 
         # 延迟恢复「上次项目」不能顶掉调用方已经打开的项目
         win._restore_last_project()

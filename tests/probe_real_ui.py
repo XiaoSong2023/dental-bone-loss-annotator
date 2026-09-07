@@ -39,7 +39,7 @@ def main() -> int:
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "status": "running", "new_inference_calls": 0,
         "inference_protocol_exercised": False,
-        "scope": "Existing real JPEG inference result replay through UI completion, editing and exports; not a complete QProcess run",
+        "scope": "Existing real inference result replay through UI completion, editing and exports; not a complete QProcess run",
         "source_result": str(result_path), "source_image": str(image_path),
         "mouse_edit_is_engineering_verification_not_clinical_review": True,
         "assertions": [],
@@ -61,6 +61,7 @@ def main() -> int:
     from app.ui.widgets.point_item import PointItem
     from app.ui.tooth_dialog import ToothDialog
     from app.core.formula import get
+    from app.core.review_geometry import project_to_contours, edit_box, undo_box
 
     app = QApplication.instance() or QApplication([])
     app.setQuitOnLastWindowClosed(False)
@@ -93,7 +94,7 @@ def main() -> int:
         copied = run_dir / "output"
         shutil.copytree(result_path.parent, copied)
         copied_result = copied / result_path.name
-        input_snapshot = run_dir / "source-input.jpg"
+        input_snapshot = run_dir / ("source-input" + image_path.suffix)
         shutil.copy2(image_path, input_snapshot)
         check("original_model_output_copied_unchanged", digest(copied_result) == digest(result_path))
         check("input_snapshot_matches_unmodified_model_source", digest(input_snapshot) == original["image"]["sha256"])
@@ -112,7 +113,7 @@ def main() -> int:
             check("image_coordinate_dimensions_match", (window.ann.image_width, window.ann.image_height) ==
                   (original["image"]["width"], original["image"]["height"]))
             window._ai_context = (window.project, window.entry, window.ann, run_dir,
-                                  input_snapshot, "source_jpeg_snapshot_no_conversion")
+                                  input_snapshot, "source_image_snapshot_no_conversion")
             window._ai_busy = True
             window.btn_pick.setChecked(False)
             window._update_enabled()
@@ -139,9 +140,17 @@ def main() -> int:
             check("run_reference_is_portable", not Path(ann.ai_runs[-1]["result_ref"]).is_absolute()
                   and (project.root / ann.ai_runs[-1]["result_ref"]).is_file())
             check("analysis_input_provenance_is_accurate", ann.ai_runs[-1]["analysis_input"]["sha256"] == original["image"]["sha256"]
-                  and ann.ai_runs[-1]["analysis_input"]["preconversion"] == "source_jpeg_snapshot_no_conversion"
+                  and ann.ai_runs[-1]["analysis_input"]["preconversion"] == "source_image_snapshot_no_conversion"
                   and ann.ai_runs[-1]["source_case"]["sha1"] == window.entry.sha1)
             check("all_segmentation_masks_preserved", all((project.root / t.segmentation["mask_ref"]).is_file() for t in ann.teeth))
+            residuals = [project_to_contours(p.as_tuple(), t.segmentation["contours"])[1]["distance_px"]
+                         for t, s, role, p in selected_points]
+            check("all_displayed_candidates_on_displayed_contour", max(residuals) < 1e-6,
+                  max_residual_px=max(residuals))
+            original_raw = [tuple(p.get("raw_xy", p["xy"])) for t in original["teeth"]
+                            for s in t["surfaces"] for p in s["points"].values() if p]
+            check("all_displayed_candidates_keep_actual_model_raw", all(
+                tuple(s.point_meta[role]["raw_xy"]) in original_raw for t, s, role, p in selected_points))
             window.setWindowTitle("真实模型自动结果 · UI 验证测试项目")
             window.view.fit()
             settle()
@@ -190,6 +199,18 @@ def main() -> int:
             check("reopen_retains_manual_edit", math.dist(restored_site.get(role).as_tuple(), after) < 1e-5)
             check("reopen_retains_raw_prediction", restored_site.point_meta[role]["raw_xy"] == raw)
             check("reopen_retains_all_teeth", len(window.ann.teeth) == len(original["teeth"]))
+            original_box = restored_tooth.roi
+            x, y, w, h = original_box
+            edit_box(window.ann, (x+1, y+1, w-2, h-2), restored_tooth)
+            window.save_current(silent=True)
+            window._load_project(Project.open(project.root))
+            check("box_undo_history_survives_reopen", bool(window.ann.box_history))
+            check("box_undo_succeeds_after_reopen", undo_box(window.ann))
+            restored_tooth = next(t for t in window.ann.teeth if t.tooth_id == tooth_id)
+            restored_site = restored_tooth.site(surface)
+            check("box_undo_recovers_real_auto_box_and_keeps_drag", restored_tooth.roi == original_box
+                  and math.dist(restored_site.get(role).as_tuple(), after) < 1e-5)
+            window.save_current(silent=True)
             window.btn_pick.setChecked(False)
             window.view.fit()
             settle()

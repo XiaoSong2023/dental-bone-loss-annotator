@@ -47,7 +47,9 @@ class AiClient(QObject):
         return self._active
 
     def start(self, input_path: Path, output: Path, *, command=None,
-              models=None, cwd=None) -> None:
+              models=None, cwd=None, mode="full") -> None:
+        if mode not in ("full", "segmentation"):
+            raise ValueError("未知自动分析模式")
         if self.busy:
             raise RuntimeError("已有自动标注正在运行")
         default_command, default_models, default_cwd = runtime_paths()
@@ -69,6 +71,8 @@ class AiClient(QObject):
         self.process.setWorkingDirectory(str(cwd))
         args = [*command[1:], "--input", str(input_path), "--models", str(models),
                 "--output", str(output)]
+        if mode != "full":
+            args.extend(["--mode", mode])
         self.process.start(command[0], args)
 
     def _log(self, data: bytes) -> None:
