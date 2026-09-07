@@ -95,3 +95,22 @@ def test_segmentation_cannot_inject_points_or_modify_existing_marks():
     merge_ai_result(ann, result)
     assert ann.teeth[0].site('mesial').cej.as_tuple() == (12.3, 44.5)
     assert sum(t.filled_count for t in ann.teeth) == 1
+
+
+def test_inverse_transform_edge_rounding_is_preserved_as_raw_only():
+    ann = CaseAnnotation(image_width=200, image_height=200)
+    ann.add_tooth(16, (0., 0., 80., 160.))
+    result = snapshot_result(ann)
+    point = result['teeth'][0]['surfaces'][0]['points']['cej']
+    point['xy'], point['raw_xy'] = [0., 50.], [-1e-6, 50.]
+    merge_ai_result(ann, result)
+    site = ann.teeth[0].site('mesial')
+    assert site.cej.as_tuple() == (0., 50.)
+    assert site.point_meta['cej']['raw_xy'] == [-1e-6, 50.]
+    invalid = snapshot_result(ann)
+    invalid['run_id'] = 'invalid-edge'
+    invalid['teeth'][0]['surfaces'][0]['points']['cej']['raw_xy'] = [-.01, 50.]
+    before = ann.to_dict()
+    with pytest.raises(ValueError):
+        merge_ai_result(ann, invalid)
+    assert ann.to_dict() == before

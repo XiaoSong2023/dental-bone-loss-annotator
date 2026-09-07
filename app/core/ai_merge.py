@@ -8,11 +8,15 @@ from pathlib import PurePosixPath
 from .models import CaseAnnotation, Pt
 
 
-def _xy(value, width, height):
+def _xy(value, width, height, *, raw=False):
     if not isinstance(value, (list, tuple)) or len(value) != 2:
         raise ValueError("自动点坐标格式错误")
     x, y = map(float, value)
-    if not math.isfinite(x) or not math.isfinite(y) or not (0 <= x < width and 0 <= y < height):
+    # Pose decoding tolerates 1e-4px inverse-transform rounding at pixel edges.
+    # Preserve that raw value; only the displayed point has already been clipped.
+    inside = (-1e-4 <= x <= width-1+1e-4 and -1e-4 <= y <= height-1+1e-4) if raw else (
+        0 <= x < width and 0 <= y < height)
+    if not math.isfinite(x) or not math.isfinite(y) or not inside:
         raise ValueError("自动点超出原图或包含无效数值")
     return [x, y]
 
@@ -120,7 +124,7 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
                 if point is not None:
                     point["xy"] = _xy(point["xy"], width, height)
                     if point.get("raw_xy") is not None:
-                        point["raw_xy"] = _xy(point["raw_xy"], width, height)
+                        point["raw_xy"] = _xy(point["raw_xy"], width, height, raw=True)
                     _score(point["score"])
         if prediction.get("mask_ref"):
             _relative(prediction["mask_ref"])
