@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPen
 from PySide6.QtWidgets import QGraphicsItem
 
@@ -136,6 +136,9 @@ class PanoramaView(ZoomCanvas):
                         item.moved.connect(
                             lambda _it, pos, t=tooth, s=site, r=role:
                             self.point_dragged.emit(t, s, r, pos)
+                        )
+                        item.move_finished.connect(
+                            lambda _it: QTimer.singleShot(0, self, self.refresh_overlay)
                         )
                         self._add(item)
 

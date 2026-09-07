@@ -35,6 +35,7 @@ class PointItem(QGraphicsObject):
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, movable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, movable)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsScenePositionChanges, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
         self.setAcceptHoverEvents(True)
         self.setCursor(Qt.CursorShape.SizeAllCursor if movable else Qt.CursorShape.ArrowCursor)
         self.setToolTip(f"{label} · {role_short}" if role_short else label)
@@ -119,6 +120,13 @@ class PointItem(QGraphicsObject):
             self.move_finished.emit(self)
 
     def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self.scene():
+            rect = self.scene().sceneRect()
+            if not rect.isEmpty():
+                return QPointF(
+                    max(rect.left(), min(value.x(), rect.right() - 1)),
+                    max(rect.top(), min(value.y(), rect.bottom() - 1)),
+                )
         if change == QGraphicsItem.GraphicsItemChange.ItemScenePositionHasChanged:
             self.moved.emit(self, self.scenePos())
         return super().itemChange(change, value)

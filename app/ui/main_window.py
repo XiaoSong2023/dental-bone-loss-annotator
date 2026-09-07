@@ -39,7 +39,7 @@ from PySide6.QtWidgets import (
 from ..core import export as exporter
 from ..core import roster as roster_mod
 from ..core.formula import FORMULAS, choices as formula_choices, get as get_formula
-from ..core.models import CaseAnnotation, Tooth
+from ..core.models import CaseAnnotation, Pt, Tooth
 from ..core.project import (
     MODE_LABEL,
     MODE_PERIAPICAL,
@@ -879,7 +879,7 @@ class MainWindow(QMainWindow):
         p = site.get(role)
         if p is None:
             return
-        p.x, p.y = pos.x(), pos.y()
+        site.set(role, Pt(pos.x(), pos.y()))
         self._mark_dirty()
         self.inspector.refresh()
 

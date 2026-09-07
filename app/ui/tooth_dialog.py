@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import numpy as np
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
@@ -85,8 +87,9 @@ class ToothDialog(QDialog):
         self.resize(1180, 820)
 
         self._gray = gray
-        self._ann = ann
-        self._teeth = teeth
+        self._original_ann = ann
+        self._ann = deepcopy(ann)
+        self._teeth = [self._ann.teeth[ann.teeth.index(t)] for t in teeth]
         self._formula = formula
         self._fcfg = fcfg
         self._ti = 0                      # 当前第几颗牙
@@ -96,6 +99,11 @@ class ToothDialog(QDialog):
         self._build_ui()
         self._install_shortcuts()
         self._goto_tooth(0)
+
+    def accept(self) -> None:
+        # Editing is transactional: Esc/Cancel never alters saved or AI raw points.
+        self._original_ann.teeth = deepcopy(self._ann.teeth)
+        super().accept()
 
     # ── 界面 ─────────────────────────────────────────────────────
     def _build_ui(self) -> None:
@@ -303,7 +311,7 @@ class ToothDialog(QDialog):
         p = site.get(role)
         if p is None:
             return
-        p.x, p.y = pos.x(), pos.y()
+        site.set(role, Pt(pos.x(), pos.y()))
         self._refresh_texts()          # 拖动中只更新数字，避免重建图元导致抖动
 
     def undo(self) -> None:
