@@ -39,7 +39,7 @@ def main() -> int:
         "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "status": "running", "new_inference_calls": 0,
         "inference_protocol_exercised": False,
-        "scope": "Existing real inference result replay through UI completion, editing and exports; not a complete QProcess run",
+        "scope": "Existing real full inference result loaded through core merge for UI editing and landmark-only exports; not a UI operation or QProcess run",
         "source_result": str(result_path), "source_image": str(image_path),
         "mouse_edit_is_engineering_verification_not_clinical_review": True,
         "assertions": [],
@@ -62,6 +62,7 @@ def main() -> int:
     from app.ui.tooth_dialog import ToothDialog
     from app.core.formula import get
     from app.core.review_geometry import project_to_contours, edit_box, undo_box
+    from app.core.ai_merge import merge_ai_result
 
     app = QApplication.instance() or QApplication([])
     app.setQuitOnLastWindowClosed(False)
@@ -112,12 +113,20 @@ def main() -> int:
             settle()
             check("image_coordinate_dimensions_match", (window.ann.image_width, window.ann.image_height) ==
                   (original["image"]["width"], original["image"]["height"]))
-            window._ai_context = (window.project, window.entry, window.ann, run_dir,
-                                  input_snapshot, "source_image_snapshot_no_conversion")
-            window._ai_busy = True
+            # Old full-run results remain useful real fixtures. The unified UI
+            # does not expose a combined operation; load this via the core API.
+            replay = dict(original)
+            replay["result_ref"] = copied_result.relative_to(project.root).as_posix()
+            replay["source_case"] = {"image": window.entry.image, "sha1": window.entry.sha1}
+            replay["analysis_input"] = {"sha256": digest(input_snapshot),
+                "preconversion": "source_image_snapshot_no_conversion", "display_adjust_used": False,
+                "input_ref": input_snapshot.relative_to(project.root).as_posix()}
+            merge_ai_result(window.ann, replay)
+            window._mark_dirty()
+            window.save_current(silent=True)
+            window._refresh_all()
             window.btn_pick.setChecked(False)
             window._update_enabled()
-            window._ai_completed(str(copied_result))
             settle()
             ann = window.ann
             selected_points = [(t, s, role, s.get(role)) for t in ann.teeth for s in t.sites
@@ -231,22 +240,19 @@ def main() -> int:
             data = json.loads(exported_json.read_text(encoding="utf-8"))
             exported_tooth = next(t for t in data["teeth"] if t["tooth_id"] == tooth_id)
             exported_site = next(s for s in exported_tooth["sites"] if s["surface"] == surface)
-            check("json_retains_edited_and_raw_coordinates", math.dist([exported_site[role]["x"], exported_site[role]["y"]], after) < 1e-5
-                  and exported_site["point_meta"][role]["raw_xy"] == raw)
+            check("json_exports_current_points_only", math.dist([exported_site[role]["x"], exported_site[role]["y"]], after) < 1e-5
+                  and "point_meta" not in exported_site and "roi_corners" not in exported_tooth
+                  and "roi" not in exported_tooth and "segmentation" not in exported_tooth
+                  and "ai_runs" not in data and "box_history" not in data)
             with (project.exports_dir / "sites.csv").open(encoding="utf-8-sig", newline="") as stream:
                 rows = list(csv.DictReader(stream))
             row = next(row for row in rows if int(row["牙序"]) == restored_tooth.index+1 and row["邻面"] == restored_site.display_label)
-            check("csv_exports_manual_edit_and_original_prediction", math.dist([float(row["APEX_x"]), float(row["APEX_y"])], after) < .008
-                  and math.dist([float(row["APEX_原始x"]), float(row["APEX_原始y"])], raw) < 1e-5
-                  and row["APEX_人工修正"] == "是" and row["侧别已确认"] == "否")
-            with (project.exports_dir / "boxes.csv").open(encoding="utf-8-sig", newline="") as stream:
-                boxes = list(csv.DictReader(stream))
-            check("csv_exports_all_four_box_corners", len(boxes) == len(original["teeth"]) and
-                  all(all(row[f"框{corner}_{axis}"] != "" for corner in ("左上", "右上", "右下", "左下")
-                          for axis in ("x", "y")) for row in boxes))
+            check("csv_exports_current_manual_edit_only", math.dist([float(row["APEX_x"]), float(row["APEX_y"])], after) < .008
+                  and not any("框" in key or "原始" in key for key in row))
+            check("csv_has_no_box_table", not (project.exports_dir / "boxes.csv").exists())
             workbook = load_workbook(project.exports_dir / "汇总.xlsx", read_only=True, data_only=True)
-            check("excel_exports_sites_and_boxes", workbook["位点级明细"].max_row == len(rows)+1 and
-                  workbook["牙框坐标"].max_row == len(boxes)+1)
+            check("excel_exports_original_two_sheets", workbook["位点级明细"].max_row == len(rows)+1 and
+                  workbook.sheetnames == ["患者级汇总", "位点级明细"])
             values = list(workbook["位点级明细"].values)
             excel_rows = [dict(zip(values[0], row)) for row in values[1:]]
             excel_row = next(row for row in excel_rows if int(row["牙序"]) == restored_tooth.index+1 and row["邻面"] == restored_site.display_label)
