@@ -2,7 +2,8 @@
 
 交互（与 labelme 等标注工具的习惯一致）：
   · 滚轮            以光标为锚点缩放
-  · 中键拖 / 空格拖   平移
+  · 中键拖 / 空格拖 / 触控板双指   平移
+  · 抓手工具       左键空白处拖动平移，点上仍可拖点
   · 双击            适配窗口
   · 左键            发出 clicked 信号（携带图像坐标）
 
@@ -16,6 +17,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QPainter, QPixmap, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
+    QGraphicsItem,
     QGraphicsScene,
     QGraphicsView,
     QWidget,
@@ -40,6 +42,8 @@ class ZoomCanvas(QGraphicsView):
         self._panning = False
         self._pan_origin = QPointF()
         self._space_held = False
+        self._hand_tool = False
+        self._pan_button = Qt.MouseButton.NoButton
         # 首次适配窗口是否还欠着。widget 还没布局完时 viewport 尺寸是无效的，
         # 这时 fitInView 会把图缩成一小团；所以记账，等真正拿到尺寸再补一次。
         self._fit_pending = False
@@ -71,6 +75,7 @@ class ZoomCanvas(QGraphicsView):
             self._pix_item.setPixmap(pix)
 
         self._scene.setSceneRect(QRectF(pix.rect()))
+        self._update_pan_extent()
         if keep_view and transform is not None:
             self.setTransform(transform)
             self.centerOn(center)
@@ -107,7 +112,30 @@ class ZoomCanvas(QGraphicsView):
             return
         self._fit_pending = False
         self.fitInView(target, Qt.AspectRatioMode.KeepAspectRatio)
+        self._update_pan_extent()
         self.zoom_changed.emit(self.current_scale())
+
+    def _update_pan_extent(self) -> None:
+        """Leave room around the image to pan even at 'fit image'.
+
+        The view's scroll area can exceed the image. The underlying scene rectangle
+        remains the true image bounds so dragging points still clamps correctly.
+        """
+        if not self.has_image:
+            self.setSceneRect(QRectF())
+            return
+        inverse, _ = self.viewportTransform().inverted()
+        center = inverse.map(QPointF(self.viewport().width() / 2,
+                                    self.viewport().height() / 2))
+        image = self._scene.sceneRect()
+        scale = max(self.current_scale(), MIN_SCALE)
+        margin_x = max(image.width(), self.viewport().width() / scale)
+        margin_y = max(image.height(), self.viewport().height() / scale)
+        extent = image.adjusted(-margin_x, -margin_y, margin_x, margin_y)
+        extent = extent.united(QRectF(center.x()-margin_x, center.y()-margin_y,
+                                     margin_x*2, margin_y*2))
+        self.setSceneRect(extent)
+        self.centerOn(center)
 
     def _flush_pending_fit(self) -> None:
         if self._fit_pending and self._pending_fit_rect is not None:
@@ -119,6 +147,7 @@ class ZoomCanvas(QGraphicsView):
 
     def resizeEvent(self, e) -> None:
         super().resizeEvent(e)
+        self._update_pan_extent()
         self._flush_pending_fit()
 
     def zoom_by(self, factor: float) -> None:
@@ -128,6 +157,7 @@ class ZoomCanvas(QGraphicsView):
             return
         self._fit_pending = False          # 用户主动缩放了，别再自动纠正
         self.scale(target / s, target / s)
+        self._update_pan_extent()
         self.zoom_changed.emit(self.current_scale())
 
     def zoom_to(self, scale: float) -> None:
@@ -138,6 +168,15 @@ class ZoomCanvas(QGraphicsView):
     def wheelEvent(self, e: QWheelEvent) -> None:
         if not self.has_image:
             return
+        pixels = e.pixelDelta()
+        if not pixels.isNull():
+            self.pan_by_pixels(QPointF(pixels))
+            e.accept()
+            return
+        if e.angleDelta().x():
+            self.pan_by_pixels(QPointF(e.angleDelta().x() / 2, 0))
+            e.accept()
+            return
         delta = e.angleDelta().y()
         if delta == 0:
             return
@@ -145,17 +184,46 @@ class ZoomCanvas(QGraphicsView):
         e.accept()
 
     # ── 平移 ─────────────────────────────────────────────────────
+    def set_hand_tool(self, on: bool) -> None:
+        self._hand_tool = bool(on)
+        self._update_cursor()
+
+    def _movable_item_at(self, position) -> bool:
+        item = self.itemAt(position.toPoint())
+        while item is not None:
+            if item.flags() & QGraphicsItem.GraphicsItemFlag.ItemIsMovable:
+                return True
+            item = item.parentItem()
+        return False
+
+    def _update_cursor(self) -> None:
+        self.setCursor(Qt.CursorShape.ClosedHandCursor if self._panning else
+                       Qt.CursorShape.OpenHandCursor if self._hand_tool or self._space_held else
+                       Qt.CursorShape.ArrowCursor)
+
     def _pan_active(self, e) -> bool:
         return (
             e.button() == Qt.MouseButton.MiddleButton
             or (e.button() == Qt.MouseButton.LeftButton and self._space_held)
             or (e.button() == Qt.MouseButton.LeftButton
                 and e.modifiers() & Qt.KeyboardModifier.ControlModifier)
+            or (e.button() == Qt.MouseButton.LeftButton and self._hand_tool
+                and not self._movable_item_at(e.position()))
         )
 
+    def pan_by_pixels(self, delta: QPointF) -> None:
+        if not self.has_image:
+            return
+        self._fit_pending = False
+        self._update_pan_extent()
+        h, v = self.horizontalScrollBar(), self.verticalScrollBar()
+        h.setValue(h.value() - round(delta.x()))
+        v.setValue(v.value() - round(delta.y()))
+
     def mousePressEvent(self, e) -> None:
-        if self._pan_active(e):
+        if self.has_image and self._pan_active(e):
             self._panning = True
+            self._pan_button = e.button()
             self._pan_origin = e.position()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             e.accept()
@@ -168,10 +236,7 @@ class ZoomCanvas(QGraphicsView):
         if self._panning:
             d = e.position() - self._pan_origin
             self._pan_origin = e.position()
-            h = self.horizontalScrollBar()
-            v = self.verticalScrollBar()
-            h.setValue(h.value() - int(d.x()))
-            v.setValue(v.value() - int(d.y()))
+            self.pan_by_pixels(d)
             e.accept()
             return
         if self.has_image:
@@ -179,11 +244,10 @@ class ZoomCanvas(QGraphicsView):
         super().mouseMoveEvent(e)
 
     def mouseReleaseEvent(self, e) -> None:
-        if self._panning and (
-            e.button() in (Qt.MouseButton.MiddleButton, Qt.MouseButton.LeftButton)
-        ):
+        if self._panning and e.button() == self._pan_button:
             self._panning = False
-            self.unsetCursor()
+            self._pan_button = Qt.MouseButton.NoButton
+            self._update_cursor()
             e.accept()
             return
         super().mouseReleaseEvent(e)
@@ -198,14 +262,14 @@ class ZoomCanvas(QGraphicsView):
     def keyPressEvent(self, e) -> None:
         if e.key() == Qt.Key.Key_Space and not e.isAutoRepeat():
             self._space_held = True
-            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            self._update_cursor()
         super().keyPressEvent(e)
 
     def keyReleaseEvent(self, e) -> None:
         if e.key() == Qt.Key.Key_Space and not e.isAutoRepeat():
             self._space_held = False
             if not self._panning:
-                self.unsetCursor()
+                self._update_cursor()
         super().keyReleaseEvent(e)
 
     # ── 便利 ─────────────────────────────────────────────────────

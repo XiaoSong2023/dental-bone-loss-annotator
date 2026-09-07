@@ -60,6 +60,10 @@ class AnnotateCanvas(PanoramaView):
     canvas_clicked = Signal(QPointF)
 
     def mousePressEvent(self, e) -> None:
+        from .widgets.zoom_canvas import ZoomCanvas
+        if self._pan_active(e):
+            ZoomCanvas.mousePressEvent(self, e)
+            return
         if (
             e.button() == Qt.MouseButton.LeftButton
             and not (e.modifiers() & Qt.KeyboardModifier.ControlModifier)
@@ -75,8 +79,12 @@ class AnnotateCanvas(PanoramaView):
                     e.accept()
                     return
         # 绕开 PanoramaView 的选牙逻辑
-        from .widgets.zoom_canvas import ZoomCanvas
         ZoomCanvas.mousePressEvent(self, e)
+
+    def mouseDoubleClickEvent(self, e) -> None:
+        # The review dialog already has a selected tooth; do not open a second chooser.
+        from .widgets.zoom_canvas import ZoomCanvas
+        ZoomCanvas.mouseDoubleClickEvent(self, e)
 
 
 class ToothDialog(QDialog):
@@ -187,6 +195,10 @@ class ToothDialog(QDialog):
         btn_clear.clicked.connect(self._clear_tooth)
         btn_fit = QPushButton("重新框住本牙  (F)")
         btn_fit.clicked.connect(self._fit_tooth)
+        self.btn_hand = QPushButton("抓手平移  (H)")
+        self.btn_hand.setCheckable(True)
+        self.btn_hand.setToolTip("选中后在空白处左键拖动图像，已有标点仍可拖动；取消选中后点击空白落点")
+        self.btn_hand.toggled.connect(self.canvas.set_hand_tool)
         self.btn_review = QPushButton("确认本牙候选坐标")
         self.btn_review.setToolTip("确认目前显示的候选位置；侧别仍需在上方另行确认")
         self.btn_review.clicked.connect(self._review_points)
@@ -202,6 +214,7 @@ class ToothDialog(QDialog):
         side.addWidget(self.metrics)
         side.addStretch(1)
         side.addWidget(btn_fit)
+        side.addWidget(self.btn_hand)
         side.addWidget(self.btn_review)
         side.addWidget(btn_undo)
         side.addWidget(btn_clear)
@@ -239,6 +252,7 @@ class ToothDialog(QDialog):
         QShortcut(QKeySequence(Qt.Key.Key_Space), self, activated=self._advance)
         QShortcut(QKeySequence(Qt.Key.Key_Backspace), self, activated=self.undo)
         QShortcut(QKeySequence("F"), self, activated=self._fit_tooth)
+        QShortcut(QKeySequence("H"), self, activated=self.btn_hand.toggle)
         QShortcut(QKeySequence("S"), self, activated=self._skip_current_side)
         QShortcut(QKeySequence(Qt.Key.Key_PageDown), self, activated=self.next_tooth)
         QShortcut(QKeySequence(Qt.Key.Key_PageUp), self, activated=self.prev_tooth)

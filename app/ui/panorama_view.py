@@ -14,9 +14,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPen, QPolygonF
-from PySide6.QtWidgets import QGraphicsItem
+from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPen, QPixmap, QPolygonF
+from PySide6.QtWidgets import QGraphicsItem, QMenu
 
 from ..core import geometry as g
 from ..core.formula import Formula, FormulaConfig
@@ -33,6 +33,7 @@ from .widgets.zoom_canvas import ZoomCanvas
 
 MODE_VIEW = "view"
 MODE_PICK = "pick"       # 拖框选牙
+MODE_HAND = "hand"       # 左键抓手；点上仍可拖点
 
 
 @dataclass
@@ -49,6 +50,7 @@ MIN_BOX = 18.0          # 小于这个尺寸的拖拽当成误触，不成框
 
 class PanoramaView(ZoomCanvas):
     box_drawn = Signal(QRectF)              # 画框选牙：拖出一个框
+    tooth_activated = Signal(object)        # 双击并明确选中的 Tooth
     point_dragged = Signal(object, object, str, QPointF)   # tooth, site, role, 新坐标
 
     def __init__(self, parent=None):
@@ -62,6 +64,7 @@ class PanoramaView(ZoomCanvas):
         self._gray: np.ndarray | None = None
         self._rubber = None                 # 正在拖拽的选框
         self._rubber_origin: QPointF | None = None
+        self._tooth_menu = None
 
     # ── 数据 ─────────────────────────────────────────────────────
     def set_case(self, gray: np.ndarray | None, ann: CaseAnnotation | None,
@@ -83,11 +86,49 @@ class PanoramaView(ZoomCanvas):
         self.refresh_overlay()
 
     def set_mode(self, mode: str) -> None:
+        if mode not in (MODE_VIEW, MODE_PICK, MODE_HAND):
+            raise ValueError("未知画布模式")
+        if mode != MODE_PICK:
+            self.cancel_box()
         self.mode = mode
-        self.setCursor(
-            Qt.CursorShape.CrossCursor if mode == MODE_PICK
-            else Qt.CursorShape.ArrowCursor
-        )
+        self.set_hand_tool(mode == MODE_HAND)
+
+    def _update_cursor(self) -> None:
+        super()._update_cursor()
+        if not self._panning and not self._space_held and not self._hand_tool and self.mode == MODE_PICK:
+            self.setCursor(Qt.CursorShape.CrossCursor)
+
+    def teeth_at(self, point: QPointF) -> list[Tooth]:
+        """Return every ROI hit, preserving the user's tooth order."""
+        if self._ann is None:
+            return []
+        return [tooth for tooth in self._ann.teeth
+                if tooth.roi is not None and QRectF(*tooth.roi).normalized().contains(point)]
+
+    def _choose_tooth(self, teeth: list[Tooth], position) -> None:
+        menu = QMenu(self)
+        self._tooth_menu = menu
+        menu.setTitle("选择要打开的牙框")
+        for index, tooth in enumerate(teeth):
+            label = ""
+            number = index + 1
+            while number:
+                number, letter = divmod(number - 1, 26)
+                label = chr(ord("A") + letter) + label
+            swatch = QPixmap(12, 12)
+            swatch.fill(QColor(tooth.color))
+            action = menu.addAction(QIcon(swatch), f"方框 {label} · 牙位 {tooth.name}（序号 {tooth.index + 1}）")
+            x, y, w, h = tooth.roi
+            action.setToolTip(f"左上 ({x:.1f}, {y:.1f})，宽 {w:.1f}，高 {h:.1f}")
+            action.triggered.connect(
+                lambda _checked=False, selected=tooth:
+                QTimer.singleShot(0, self, lambda: self.tooth_activated.emit(selected))
+            )
+        menu.addSeparator()
+        menu.addAction("取消")
+        menu.aboutToHide.connect(menu.deleteLater)
+        # Do not enter a nested event loop inside a graphics mouse handler.
+        menu.popup(self.viewport().mapToGlobal(position))
 
     # ── 叠加层 ────────────────────────────────────────────────────
     def refresh_overlay(self) -> None:
@@ -104,7 +145,43 @@ class PanoramaView(ZoomCanvas):
         self._overlay.append(item)
         return item
 
-    def _draw_teeth(self) -> None:
+    def _refresh_measurements(self) -> None:
+        # Keep the PointItem under the pointer alive after releasing a drag.
+        # Updating axes/captions needs no replacement of the draggable point.
+        points = []
+        for item in self._overlay:
+            if isinstance(item, PointItem):
+                points.append(item)
+                self._update_point_caption(item, *item.annotation_ref)
+            elif item.scene() is self.scene_():
+                self.scene_().removeItem(item)
+        self._overlay = points
+        if self._ann is not None:
+            self._draw_teeth(draw_points=False)
+
+    def _update_point_caption(self, item: PointItem, tooth: Tooth, site, role: str) -> None:
+        meta = getattr(site, "point_meta", {}).get(role, {})
+        pending = meta.get("origin") == "model" and meta.get("review_status") != "reviewed"
+        label = point_label(tooth.index, site.surface, role) + ("·候" if pending else "")
+        item.set_label(label if self.layers.labels else "")
+        text = f"{label} · {ROLE_SHORT[role]} · {getattr(site, 'display_label', site.surface)}"
+        if meta.get("origin") == "model":
+            text += "\n" + ("待复核候选" if pending else "已人工复核") + "；拖动可调整坐标"
+        projection = meta.get("boundary_projection")
+        if projection is not None:
+            text += f"\n轮廓约束候选，移动 {projection.get('distance_px', 0):.1f} px；仍需解剖复核"
+        item.setToolTip(text)
+
+    @Slot(object, QPointF)
+    def _point_moved(self, item: PointItem, position: QPointF) -> None:
+        tooth, site, role = item.annotation_ref
+        self.point_dragged.emit(tooth, site, role, position)
+
+    @Slot(object)
+    def _point_move_finished(self, _item: PointItem) -> None:
+        QTimer.singleShot(0, self, self._refresh_measurements)
+
+    def _draw_teeth(self, draw_points: bool = True) -> None:
         for tooth in self._ann.teeth:
             color = QColor(tooth.color)
             if self.layers.segmentation:
@@ -140,34 +217,24 @@ class PanoramaView(ZoomCanvas):
                     continue
                 if self.layers.axis:
                     self._draw_axis(tooth, site, color)
-                if self.layers.points:
+                if self.layers.points and draw_points:
                     for role in ROLES:
                         p = site.get(role)
                         if p is None:
                             continue
-                        meta = getattr(site, "point_meta", {}).get(role, {})
-                        pending = meta.get("origin") == "model" and meta.get("review_status") != "reviewed"
-                        label = point_label(tooth.index, site.surface, role)
-                        if pending:
-                            label += "·候"
                         item = PointItem(
                             QPointF(p.x, p.y),
                             tooth.color,
-                            label if self.layers.labels else "",
+                            "",
                             ROLE_SHORT[role],
                             movable=True,
                         )
-                        item.moved.connect(
-                            lambda _it, pos, t=tooth, s=site, r=role:
-                            self.point_dragged.emit(t, s, r, pos)
-                        )
-                        if meta.get("origin") == "model":
-                            side = getattr(site, "display_label", site.surface)
-                            state = "待复核候选" if pending else "已人工复核"
-                            item.setToolTip(f"{label} · {ROLE_SHORT[role]} · {side}\n{state}；拖动可调整坐标")
-                        item.move_finished.connect(
-                            lambda _it: QTimer.singleShot(0, self, self.refresh_overlay)
-                        )
+                        item.annotation_ref = (tooth, site, role)
+                        # QObject slots avoid a PointItem -> lambda -> view cycle
+                        # that can outlive the C++ scene during view destruction.
+                        item.moved.connect(self._point_moved)
+                        self._update_point_caption(item, tooth, site, role)
+                        item.move_finished.connect(self._point_move_finished)
                         self._add(item)
 
             if self.layers.labels:
@@ -254,6 +321,9 @@ class PanoramaView(ZoomCanvas):
         return QPointF(max(0.0, min(p.x(), w - 1)), max(0.0, min(p.y(), h - 1)))
 
     def mousePressEvent(self, e) -> None:
+        if self._pan_active(e):
+            super().mousePressEvent(e)
+            return
         if (
             self.mode == MODE_PICK
             and e.button() == Qt.MouseButton.LeftButton
@@ -292,6 +362,27 @@ class PanoramaView(ZoomCanvas):
                 self.box_drawn.emit(rect)
             return
         super().mouseReleaseEvent(e)
+
+    def mouseDoubleClickEvent(self, e) -> None:
+        if e.button() != Qt.MouseButton.LeftButton:
+            super().mouseDoubleClickEvent(e)
+            return
+        self.cancel_box()
+        self._panning = False
+        self._pan_button = Qt.MouseButton.NoButton
+        self._update_cursor()
+        if self.mode == MODE_PICK:
+            e.accept()
+            return
+        candidates = self.teeth_at(self.mapToScene(e.position().toPoint()))
+        if candidates:
+            e.accept()
+            if len(candidates) == 1:
+                QTimer.singleShot(0, self, lambda: self.tooth_activated.emit(candidates[0]))
+            else:
+                self._choose_tooth(candidates, e.position().toPoint())
+            return
+        super().mouseDoubleClickEvent(e)
 
     def cancel_box(self) -> None:
         if self._rubber is not None and self._rubber.scene() is self.scene_():
