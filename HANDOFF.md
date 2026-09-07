@@ -1,3 +1,15 @@
+## 2026-09-07 最新接力：1.3.1 修复已完成，原生验收被用户停止
+
+当前任务是修复名册导入后当前病例（通常 001）年龄/性别被旧空值覆盖。目标工程为 D:/Codex 项目集合/全景片标注加距离测量软件开发；修复 ea5dfe8、打包 404759d。根因与已通过测试见最新 STATUS。不要重新研究 Excel 列识别、训练或修改模型。
+
+1. 源码修复、新增 6 项回归、35 项已有回归及原 core/smoke 已通过。1.3.1 GUI、Assemble、Installer 均完成；安装器在 dist/AI-integrated/牙槽骨吸收测量_安装包_v1.3.1-preview.exe。CPU runtime 从已验证 1.3 目录复制复用，记录 reports/roster-fix-v1.3.1/runtime-reuse.json。
+2. 用户在原生文件对话框输入 QA 名册路径之前/期间按物理 Esc 停止 Computer Use；本轮不得继续控制界面。不能报告原生导入通过或已安装 1.3.1。目录版 QA 进程最后 PID 60308，窗口 76025620，可能仍打开；不可假定其现时状态。此前旧安装空白窗口已正常关闭，没有强杀或丢弃待存病例。
+3. 如用户继续，先重新观察现时窗口。独立 QA 项目 reports/roster-fix-v1.3.1/native-project，名册 reports/roster-fix-v1.3.1/名册回归测试.xlsx；测试病例 001_名册回归测试、年龄 61、女，人口资料为工程夹具。native-before.png 是实际导入前截图；尚无导入后原生验收证据。
+4. 完成原生验收后正常关闭 QA，处理 QSettings last_project：之前值记录在 settings-before.json，本次打开 QA 可能已改变它；未恢复。统一启动仍保持空白，不自动打开该键。不得把 QA 项目设为用户默认项目。
+5. 原位升级尚未进行：继续使用现有 AppId {9D7D2163-EE63-4815-B2C1-37EE3B4E4B50} 与 C:/Users/Lenovo/AppData/Local/Programs/牙槽骨吸收测量AI。安装后需验证安装文件、空白启动与唯一快捷入口，再清理已替代安装器/worker-build 构建暂存。当前 1.3.0 安装包及本轮 worker-build 暂存仍保留，没有新增病例清理。
+
+以下为此前 1.3.0 及历史交付记录，不能将其已安装结论套用到 1.3.1。
+
 # HANDOFF — 2026-09-07
 
 ## 当前状态

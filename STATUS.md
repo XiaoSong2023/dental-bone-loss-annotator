@@ -1,3 +1,14 @@
+## 2026-09-07：1.3.1 名册导入修复（已构建，尚未安装）
+
+本节为最新状态；下方 1.3.0 安装及清理记录属于此前交付。
+
+- 已复现：Excel 名册解析正常，但当前打开病例在导入后被 open_case 的隐式保存用旧 self.ann 空值覆盖。首张片默认打开 001，因此表现为首人年龄、性别缺失；切换到其他病例也会触发同一问题。
+- 产品修复提交 ea5dfe8：import_roster 直接更新当前界面持有的同一份 annotation，随后刷新界面和病例列表，不重新打开当前病例。已有人工标点、备注和视图保留。
+- 新增 Excel/CSV × 当前打开第 1/2/3 人共 6 项回归全部通过；涵盖重复导入、继续保存、切换病例、重开项目与手工点保留。另 35 项既有 UI/工作流/逐牙回归通过，原 core/smoke 脚本全部通过。测试资料是工程夹具，不是实际患者人口资料。
+- 打包提交 404759d，版本 1.3.1-preview；GUI 与安装器已成功构建，沿用未改动的现有 CPU Worker/模型，SOURCE 包 106 个文件。安装包位于目标 GUI 工程 dist/AI-integrated/牙槽骨吸收测量_安装包_v1.3.1-preview.exe；installer-build.log 确认 Successful compile。
+- 目录版原生检查已观察空白启动，并打开独立 QA 项目确认导入前首人资料为空。准备在文件对话框选择名册时，用户按物理 Esc 停止 Computer Use，已停止界面操作。尚未完成打包版名册导入验收，没有执行原位安装或安装后核验；当前安装仍为 1.3.0-preview。
+- 证据集中在目标工程 reports/roster-fix-v1.3.1：roster-tests.xml、core-tests.log、smoke-tests.log、gui-build.log、installer-build.log、native-before.png。升级后重新导入一次原名册即可补齐已缺失资料。本轮未修改模型、未训练、未删除用户病例。
+
 # STATUS — 2026-09-07
 
 ## 1.3 统一版交付完成
