@@ -1,0 +1,15 @@
+.venv/
+.venv-ai/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+build/
+dist/
+reports/
+models/*
+!models/README.md
+*.onnx
+*.pt
+*.pth
+*.egg-info/
+.env*

@@ -1,0 +1,22 @@
+# 运行依赖 —— 刻意保持最小，直接决定打包体积
+#
+# ⚠️ 必须用独立 venv 安装，不要用全局环境：
+#    全局环境里 opencv-python 与 opencv-python-headless 共存，
+#    前者自带一套 Qt，PyInstaller 遇到两套 Qt binding 会直接中止构建。
+#
+#   python -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+PySide6-Essentials>=6.7        # 只要 QtCore/QtGui/QtWidgets，不要完整 PySide6（会拉 168MB 的 Addons）
+opencv-python-headless>=4.9    # 必须是 headless，见上
+numpy>=1.26
+openpyxl>=3.1                  # 名册读取 / Excel 导出（CSV 用标准库）
+
+# 可选：仅当 models/ 下放了 .onnx 权重时才需要
+onnxruntime>=1.17
+
+# ── 刻意不引入 ───────────────────────────────────────────
+# pandas       省 ~35MB，用标准库 csv + openpyxl 足够
+# scikit-image 省 ~90-110MB（会拖进 scipy/networkx/imageio/tifffile），
+#              嵴顶曲线的逐列最短路用 NumPy 手写 30 行，更快且零依赖
+# torch        省 ~700MB，推理走 onnxruntime
