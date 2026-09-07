@@ -1,0 +1,12 @@
+# Windows x64 CPU inference/build environment; Python 3.11.15.
+# +cpu pins prevent accidentally installing CUDA wheels.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.6.0+cpu
+torchvision==0.21.0+cpu
+onnxruntime==1.23.2
+numpy==1.26.4
+pillow==11.3.0
+pydantic==2.11.7
+opencv-python-headless==4.11.0.86
+pyinstaller==6.16.0
+pyinstaller-hooks-contrib==2026.7
