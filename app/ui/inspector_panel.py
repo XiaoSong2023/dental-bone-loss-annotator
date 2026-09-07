@@ -350,12 +350,16 @@ class InspectorPanel(QWidget):
         for i, (tooth, site, m) in enumerate(rows):
             vals = [
                 tooth.name,
-                SURFACE_LABEL.get(site.surface, site.surface),
+                getattr(site, "display_label", SURFACE_LABEL.get(site.surface, site.surface)),
                 "—" if site.skipped else f"{site.filled_count}/{POINTS_PER_SITE}",
                 "跳过" if site.skipped else ("—" if m is None else f"{m.ratio:.3f}"),
             ]
             tip = (f"根长 {m.root_length:.1f}px　骨吸收 {m.bone_loss:.1f}px"
                    if m else "该公式所需的点还没标齐")
+            pending = sum(meta.get("origin") == "model" and meta.get("review_status") != "reviewed"
+                          for meta in getattr(site, "point_meta", {}).values())
+            if pending:
+                tip += f"\n{pending} 个模型候选点待人工复核；按 Enter 放大调整"
             for c, v in enumerate(vals):
                 item = QTableWidgetItem(v)
                 item.setToolTip(tip)
@@ -380,6 +384,7 @@ class InspectorPanel(QWidget):
                     elif "too_short" in m.warnings:
                         item.setForeground(QColor(T.SHU))
                 self.table.setItem(i, c, item)
+        self.table.resizeRowsToContents()
         self._autosize_table()
 
     def _result_html(self, ann: CaseAnnotation, res) -> str:
@@ -393,7 +398,8 @@ class InspectorPanel(QWidget):
         if res.worst_metrics is None:
             return f'<span style="color:{T.NIBI}">尚未标定任何完整位点</span>'
 
-        where = f"{res.worst_tooth.name} {SURFACE_LABEL.get(res.worst_site.surface, '')}"
+        side_label = getattr(res.worst_site, "display_label", SURFACE_LABEL.get(res.worst_site.surface, ''))
+        where = f"{res.worst_tooth.name} {side_label}"
         icol = INTERVAL_COLORS.get(res.interval, T.SUMI)
         html = ['<table cellspacing="3">']
         html.append(row("本片最重位点" if self._periapical else "最重位点", where))

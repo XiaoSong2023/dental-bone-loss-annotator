@@ -21,6 +21,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QFrame,
     QGridLayout,
@@ -119,6 +120,15 @@ class ToothDialog(QDialog):
         f.setBold(True)
         self.title.setFont(f)
 
+        self.fdi_box = QComboBox()
+        self.fdi_box.addItem("牙位号未指定", None)
+        for quadrant in range(1, 9):
+            for number in range(1, 9 if quadrant <= 4 else 6):
+                fdi = quadrant * 10 + number
+                self.fdi_box.addItem(f"FDI {fdi}", fdi)
+        self.fdi_box.setToolTip("复核并修改本牙的 FDI 牙位号")
+        self.fdi_box.activated.connect(self._change_fdi)
+
         self.hint = QLabel()
         self.hint.setWordWrap(True)
         self.hint.setStyleSheet(f"color:{T.AI}; font-size:12pt; font-weight:600;")
@@ -130,6 +140,8 @@ class ToothDialog(QDialog):
 
         # 步骤清单
         self.step_labels: dict[tuple[str, str], QLabel] = {}
+        self.site_heads = {}
+        self.side_boxes = {}
         steps_box = QFrame()
         steps_box.setFrameShape(QFrame.Shape.StyledPanel)
         grid = QGridLayout(steps_box)
@@ -138,8 +150,15 @@ class ToothDialog(QDialog):
         row = 0
         for sf in SURFACES:
             head = QLabel(f"— {SURFACE_LABEL[sf]}面 —")
+            self.site_heads[sf] = head
             head.setStyleSheet(f"color:{T.NIBI}; font-weight:700;")
             grid.addWidget(head, row, 0, 1, 2)
+            row += 1
+            side_box = QComboBox()
+            side_box.setToolTip("模型只识别图像左右。请根据实际牙位确认近中或远中")
+            side_box.activated.connect(lambda i, s=sf: self._confirm_side(s, i))
+            self.side_boxes[sf] = side_box
+            grid.addWidget(side_box, row, 0, 1, 2)
             row += 1
             for r in ROLES:
                 lbl = QLabel()
@@ -168,9 +187,13 @@ class ToothDialog(QDialog):
         btn_clear.clicked.connect(self._clear_tooth)
         btn_fit = QPushButton("重新框住本牙  (F)")
         btn_fit.clicked.connect(self._fit_tooth)
+        self.btn_review = QPushButton("确认本牙候选坐标")
+        self.btn_review.setToolTip("确认目前显示的候选位置；侧别仍需在上方另行确认")
+        self.btn_review.clicked.connect(self._review_points)
 
         side = QVBoxLayout()
         side.addWidget(self.title)
+        side.addWidget(self.fdi_box)
         side.addWidget(self.hint)
         side.addWidget(self.dir_hint)
         side.addSpacing(6)
@@ -179,6 +202,7 @@ class ToothDialog(QDialog):
         side.addWidget(self.metrics)
         side.addStretch(1)
         side.addWidget(btn_fit)
+        side.addWidget(self.btn_review)
         side.addWidget(btn_undo)
         side.addWidget(btn_clear)
 
@@ -230,6 +254,34 @@ class ToothDialog(QDialog):
 
     def _site(self, surface: str) -> Site:
         return self.tooth.site(surface)
+
+    def _change_fdi(self, index: int) -> None:
+        self.tooth.fdi = self.fdi_box.itemData(index)
+        self._refresh_overlay()
+        self._refresh()
+
+    def _confirm_side(self, surface: str, index: int) -> None:
+        target = self.side_boxes[surface].itemData(index)
+        if target not in SURFACES:
+            return
+        site = self._site(surface)
+        if target != surface:
+            other = self._site(target)
+            other.surface, site.surface = surface, target
+            self.tooth.sites.sort(key=lambda s: SURFACES.index(s.surface))
+            # Old undo slots would refer to a different group after the swap.
+            self._undo.clear()
+        site.side_confirmed = True
+        self._refresh_overlay()
+        self._refresh()
+
+    def _review_points(self) -> None:
+        for site in self.tooth.sites:
+            for role, meta in getattr(site, "point_meta", {}).items():
+                if site.get(role) is not None and meta.get("origin") == "model":
+                    meta["review_status"] = "reviewed"
+        self._refresh_overlay()
+        self._refresh()
 
     # ── 导航 ─────────────────────────────────────────────────────
     def _goto_tooth(self, i: int) -> None:
@@ -359,10 +411,34 @@ class ToothDialog(QDialog):
     def _refresh(self) -> None:
         t = self.tooth
         self.title.setText(f"标定 {self._ti + 1}/{len(self._teeth)} · 牙位 {t.name}")
+        self.fdi_box.setCurrentIndex(max(0, self.fdi_box.findData(t.fdi)))
+        pending = False
+        for sf in SURFACES:
+            site = self._site(sf)
+            label = getattr(site, "display_label", SURFACE_LABEL[sf])
+            self.site_heads[sf].setText(f"— {label} —")
+            getattr(self, f"_skip_{sf}").setText(f"跳过{label}（看不清 / 被遮挡）")
+            box = self.side_boxes[sf]
+            box.blockSignals(True)
+            box.clear()
+            box.addItem("请确认邻面…", None)
+            for target in SURFACES:
+                text = f"确认为{SURFACE_LABEL[target]}"
+                if target != sf:
+                    text += "（互换两组）"
+                box.addItem(text, target)
+            confirmed = getattr(site, "side_confirmed", True)
+            box.setCurrentIndex(box.findData(sf) if confirmed else 0)
+            box.setVisible(getattr(site, "image_side", None) is not None)
+            box.blockSignals(False)
+            pending |= any(meta.get("origin") == "model" and meta.get("review_status") != "reviewed"
+                           for meta in getattr(site, "point_meta", {}).values())
+        self.btn_review.setEnabled(pending)
 
         sf, role = self.step
         n = point_label(t.index, sf, role)
-        self.hint.setText(f"当前步骤：{n}　{SURFACE_LABEL[sf]}面 · {ROLE_LABEL[role]}")
+        side_label = getattr(self._site(sf), "display_label", SURFACE_LABEL[sf])
+        self.hint.setText(f"当前步骤：{n}　{side_label} · {ROLE_LABEL[role]}")
 
         upper = bool(t.fdi and t.fdi // 10 in (1, 2))
         self.dir_hint.setText(
@@ -375,12 +451,14 @@ class ToothDialog(QDialog):
             site = self._site(s)
             label = point_label(t.index, s, r)
             filled = site.get(r) is not None
+            meta = getattr(site, "point_meta", {}).get(r, {})
+            candidate = meta.get("origin") == "model" and meta.get("review_status") != "reviewed"
             if site.skipped:
                 mark, color = "—", T.USUZUMI
             elif (s, r) == self.step:
                 mark, color = "●", T.AI
             elif filled:
-                mark, color = "✓", T.MATSUBA
+                mark, color = ("候", T.YAMABUKI) if candidate else ("✓", T.MATSUBA)
             else:
                 mark, color = "○", T.USUZUMI
             weight = "700" if (s, r) == self.step else "400"
@@ -398,7 +476,7 @@ class ToothDialog(QDialog):
         rows = []
         for sf in SURFACES:
             site = self._site(sf)
-            name = SURFACE_LABEL[sf]
+            name = getattr(site, "display_label", SURFACE_LABEL[sf])
             if site.skipped:
                 rows.append(f'<tr><td>{name}</td><td colspan="3" '
                             f'style="color:{T.USUZUMI}">已跳过</td></tr>')
@@ -407,7 +485,7 @@ class ToothDialog(QDialog):
             if m is None:
                 rows.append(f'<tr><td>{name}</td><td colspan="3" '
                             f'style="color:{T.NIBI}">待标定 '
-                            f"({site.filled_count}/3)</td></tr>")
+                            f"({sum(site.get(r) is not None for r in self._formula.needs)}/{len(self._formula.needs)})</td></tr>")
                 continue
             color = T.MATSUBA
             note = ""

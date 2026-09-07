@@ -10,7 +10,9 @@
 
 from __future__ import annotations
 
+import json
 import time
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -50,9 +52,10 @@ from ..core.project import (
     CaseEntry,
     Project,
 )
-from ..imaging.loader import ImageAdjust, apply_adjust, load_gray
+from ..imaging.loader import ImageAdjust, apply_adjust, imwrite_unicode, load_gray
 from ..imaging.segmenter import guess_fdi
 from . import theme as T
+from .ai_client import AiClient
 from .case_panel import CasePanel
 from .inspector_panel import InspectorPanel
 from .panorama_view import MODE_PICK, MODE_VIEW, PanoramaView
@@ -79,6 +82,13 @@ class MainWindow(QMainWindow):
         self._t0: float | None = None
         self._dirty = False
         self._sidebar_width = 320
+        self._ai_busy = False
+        self._ai_context = None
+        self._ai = AiClient(self)
+        self._ai.progress.connect(self._ai_progress)
+        self._ai.completed.connect(self._ai_completed)
+        self._ai.failed.connect(self._ai_failed)
+        self._ai.cancelled.connect(self._ai_cancelled)
 
         self._build_ui()
         self._build_menus()
@@ -250,6 +260,16 @@ class MainWindow(QMainWindow):
         self.btn_annotate.setText("开始标定  (Enter)")
         self.btn_annotate.clicked.connect(self.start_annotation)
         bot.addWidget(self.btn_annotate)
+        self.btn_auto = QToolButton()
+        self.btn_auto.setText("自动分割与三点")
+        self.btn_auto.setToolTip("自动生成牙齿轮廓及 CEJ、牙槽嵴顶、根尖候选点；完成后可拖动复核")
+        self.btn_auto.clicked.connect(self.start_auto_annotation)
+        bot.addWidget(self.btn_auto)
+        self.btn_cancel_auto = QToolButton()
+        self.btn_cancel_auto.setText("取消自动标注")
+        self.btn_cancel_auto.clicked.connect(self._ai.cancel)
+        self.btn_cancel_auto.setVisible(False)
+        bot.addWidget(self.btn_cancel_auto)
         bot.addSeparator()
 
         bot.addWidget(self._menu_button("看片调节  ▾", self._build_adjust_menu(),
@@ -329,6 +349,7 @@ class MainWindow(QMainWindow):
             ("labels", "点标签 / 牙位", True),
             ("axis", "牙长轴与投影", True),
             ("roi", "选牙方框", True),
+            ("segmentation", "自动分割轮廓", True),
         ):
             a = QAction(text, self)
             a.setCheckable(True)
@@ -395,6 +416,8 @@ class MainWindow(QMainWindow):
             self._load_project(Project.open(Path(d)))
 
     def _load_project(self, project: Project) -> None:
+        if self._ai_busy:
+            return
         self.save_current(silent=True)
         self.project = project
         self.entry = None
@@ -495,6 +518,8 @@ class MainWindow(QMainWindow):
 
     # ══ 病例 ════════════════════════════════════════════════════════
     def open_case(self, entry: CaseEntry, force: bool = False) -> None:
+        if self._ai_busy:
+            return
         if self.project is None or (self.entry is entry and not force):
             return
         self.save_current(silent=True)
@@ -816,6 +841,75 @@ class MainWindow(QMainWindow):
                 w.blockSignals(False)
 
     # ══ 画框选牙 / 标定 ═════════════════════════════════════════════
+    def start_auto_annotation(self) -> None:
+        if self._ai_busy or self.project is None or self.entry is None or self._gray is None:
+            return
+        self.save_current(silent=True)
+        run_dir = self.project.root / "runs" / uuid.uuid4().hex
+        try:
+            run_dir.mkdir(parents=True, exist_ok=False)
+            input_path = run_dir / "input.png"
+            if not imwrite_unicode(input_path, self._gray):
+                raise OSError("无法保存本次自动标注的原始图像")
+            self._ai_context = (self.project, self.entry, self.ann, run_dir)
+            self._ai_busy = True
+            self.btn_pick.setChecked(False)
+            self._update_enabled()
+            self._set_hint("正在载入模型并自动分割牙齿…")
+            self._ai.start(input_path, run_dir / "output")
+        except (OSError, RuntimeError) as exc:
+            self._ai_failed(str(exc))
+
+    def _ai_progress(self, event: dict) -> None:
+        message = event.get("message") or {
+            "segmentation": "正在分割牙齿", "keypoints": "正在识别三点候选",
+            "loading": "正在载入模型", "export": "正在还原坐标并保存结果",
+        }.get(event.get("stage"), "正在自动标注")
+        total = event.get("total")
+        suffix = f"（{event.get('current', 0)}/{total}）" if total else ""
+        self._set_hint(str(message) + suffix)
+
+    def _ai_finish(self) -> None:
+        self._ai_busy = False
+        self._ai_context = None
+        self._update_enabled()
+
+    def _ai_completed(self, result_path: str) -> None:
+        context = self._ai_context
+        if context is None:
+            return
+        project, entry, ann, _run_dir = context
+        try:
+            if project is not self.project or entry is not self.entry or ann is not self.ann:
+                raise RuntimeError("当前病例已切换，自动结果已留在 runs 文件夹，未应用到其他病例")
+            from ..core.ai_merge import merge_ai_result
+            with Path(result_path).open(encoding="utf-8") as stream:
+                result = json.load(stream)
+            result["result_ref"] = Path(result_path).relative_to(project.root).as_posix()
+            summary = merge_ai_result(ann, result)
+            self._mark_dirty()
+            self.save_current(silent=True)
+            self._refresh_all()
+            self._set_hint(
+                f"自动标注已保存：新增 {summary['added_teeth']} 颗牙，"
+                f"补入 {summary['points_added']} 个候选点；"
+                f"{summary['teeth_without_points']} 颗牙未检出三点。"
+                "可直接拖动候选，或按 Enter 放大复核侧别与补点。"
+            )
+        except Exception as exc:
+            self._ai_failed(f"自动结果无法应用：{exc}")
+            return
+        self._ai_finish()
+
+    def _ai_failed(self, message: str) -> None:
+        self._ai_finish()
+        self._set_hint(message)
+        QMessageBox.warning(self, "自动标注未完成", message)
+
+    def _ai_cancelled(self) -> None:
+        self._ai_finish()
+        self._set_hint("已取消自动标注，现有人工标注保持原样")
+
     def _toggle_pick(self, on: bool) -> None:
         self.view.set_mode(MODE_PICK if on else MODE_VIEW)
         if not on:
@@ -1042,8 +1136,9 @@ class MainWindow(QMainWindow):
 
     # ══ 杂项 ════════════════════════════════════════════════════════
     def _update_enabled(self) -> None:
-        has_proj = self.project is not None
-        has_case = self.ann is not None
+        available = not self._ai_busy
+        has_proj = self.project is not None and available
+        has_case = self.ann is not None and available
         for a in (self.act_import, self.act_roster, self.act_csv, self.act_xlsx,
                   self.act_recalc):
             a.setEnabled(has_proj)
@@ -1051,6 +1146,15 @@ class MainWindow(QMainWindow):
             a.setEnabled(has_case)
         for w in (self.btn_pick, self.btn_annotate, self.btn_done, self.btn_flag):
             w.setEnabled(has_case)
+        self.btn_auto.setEnabled(has_case and self._gray is not None)
+        self.btn_cancel_auto.setVisible(self._ai_busy)
+        self.btn_cancel_auto.setEnabled(self._ai_busy)
+        self.splitter.setEnabled(available)
+        self.menuBar().setEnabled(available)
+        self.mode_combo.setEnabled(available)
+        self.formula_combo.setEnabled(available)
+        for action in self.actions():
+            action.setEnabled(available)
 
     def show_help(self) -> None:
         QMessageBox.information(self, "用法与快捷键", HELP_TEXT)
@@ -1059,11 +1163,11 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, "关于", ABOUT_TEXT)
 
     def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls() and self.project is not None:
+        if not self._ai_busy and e.mimeData().hasUrls() and self.project is not None:
             e.acceptProposedAction()
 
     def dropEvent(self, e):
-        if self.project is None:
+        if self.project is None or self._ai_busy:
             return
         paths = [Path(u.toLocalFile()) for u in e.mimeData().urls() if u.isLocalFile()]
         if paths:
@@ -1094,6 +1198,7 @@ class MainWindow(QMainWindow):
                 pass
 
     def closeEvent(self, e) -> None:
+        self._ai.stop()
         self.save_current(silent=True)
         s = QSettings(ORG, APP)
         s.setValue("geometry", self.saveGeometry())

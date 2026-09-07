@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QPen
+from PySide6.QtGui import QBrush, QColor, QFont, QPen, QPolygonF
 from PySide6.QtWidgets import QGraphicsItem
 
 from ..core import geometry as g
@@ -41,6 +41,7 @@ class Layers:
     labels: bool = True
     axis: bool = True
     roi: bool = True
+    segmentation: bool = True
 
 
 MIN_BOX = 18.0          # 小于这个尺寸的拖拽当成误触，不成框
@@ -106,6 +107,19 @@ class PanoramaView(ZoomCanvas):
     def _draw_teeth(self) -> None:
         for tooth in self._ann.teeth:
             color = QColor(tooth.color)
+            if self.layers.segmentation:
+                for contour in getattr(tooth, "segmentation", {}).get("contours", []):
+                    if len(contour) < 3:
+                        continue
+                    polygon = QPolygonF([QPointF(float(p[0]), float(p[1])) for p in contour])
+                    pen = QPen(color, 1.3)
+                    pen.setCosmetic(True)
+                    fill = QColor(color)
+                    fill.setAlpha(22)
+                    item = self.scene_().addPolygon(polygon, pen, QBrush(fill))
+                    item.setZValue(3)
+                    item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+                    self._overlay.append(item)
             if self.layers.roi and tooth.roi:
                 x, y, w, h = tooth.roi
                 pen = QPen(color, 1.6, Qt.PenStyle.DashLine)
@@ -126,10 +140,15 @@ class PanoramaView(ZoomCanvas):
                         p = site.get(role)
                         if p is None:
                             continue
+                        meta = getattr(site, "point_meta", {}).get(role, {})
+                        pending = meta.get("origin") == "model" and meta.get("review_status") != "reviewed"
+                        label = point_label(tooth.index, site.surface, role)
+                        if pending:
+                            label += "·候"
                         item = PointItem(
                             QPointF(p.x, p.y),
                             tooth.color,
-                            point_label(tooth.index, site.surface, role) if self.layers.labels else "",
+                            label if self.layers.labels else "",
                             ROLE_SHORT[role],
                             movable=True,
                         )
@@ -137,6 +156,10 @@ class PanoramaView(ZoomCanvas):
                             lambda _it, pos, t=tooth, s=site, r=role:
                             self.point_dragged.emit(t, s, r, pos)
                         )
+                        if meta.get("origin") == "model":
+                            side = getattr(site, "display_label", site.surface)
+                            state = "待复核候选" if pending else "已人工复核"
+                            item.setToolTip(f"{label} · {ROLE_SHORT[role]} · {side}\n{state}；拖动可调整坐标")
                         item.move_finished.connect(
                             lambda _it: QTimer.singleShot(0, self, self.refresh_overlay)
                         )
