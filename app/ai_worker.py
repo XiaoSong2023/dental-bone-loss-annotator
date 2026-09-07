@@ -66,7 +66,8 @@ def main(argv=None) -> int:
     parser.add_argument("--input", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--models", type=Path, required=True)
-    parser.add_argument("--mode", choices=("full", "segmentation"), default="full")
+    parser.add_argument("--mode", choices=("full", "segmentation", "keypoints"), default="full")
+    parser.add_argument("--teeth", type=Path, help="Existing teeth snapshot for keypoints mode")
     parser.add_argument("--selftest", "--health", action="store_true", dest="selftest")
     args = parser.parse_args(argv)
     protocol = sys.stdout
@@ -84,7 +85,8 @@ def main(argv=None) -> int:
                     raise ValueError("需要 --input 和 --output")
                 result = _backend().analyze_image(
                     args.input.resolve(), args.models.resolve(), args.output.resolve(),
-                    progress=lambda event: emit(dict(event, type="progress")), mode=args.mode)
+                    progress=lambda event: emit(dict(event, type="progress")), mode=args.mode,
+                    teeth_path=args.teeth.resolve() if args.teeth else None)
                 result_path = args.output.resolve() / "result.json"
                 if result.get("status") != "completed" or not result_path.is_file():
                     raise RuntimeError("自动分析没有生成完整结果")

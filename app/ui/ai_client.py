@@ -47,9 +47,13 @@ class AiClient(QObject):
         return self._active
 
     def start(self, input_path: Path, output: Path, *, command=None,
-              models=None, cwd=None, mode="full") -> None:
-        if mode not in ("full", "segmentation"):
+              models=None, cwd=None, mode="full", teeth_path: Path | None = None) -> None:
+        if mode not in ("full", "segmentation", "keypoints"):
             raise ValueError("未知自动分析模式")
+        if mode == "keypoints" and (teeth_path is None or not Path(teeth_path).is_file()):
+            raise ValueError("独立三点识别需要现有牙框快照文件")
+        if mode != "keypoints" and teeth_path is not None:
+            raise ValueError("牙框快照只能用于独立三点识别")
         if self.busy:
             raise RuntimeError("已有自动标注正在运行")
         default_command, default_models, default_cwd = runtime_paths()
@@ -73,6 +77,8 @@ class AiClient(QObject):
                 "--output", str(output)]
         if mode != "full":
             args.extend(["--mode", mode])
+        if teeth_path is not None:
+            args.extend(["--teeth", str(Path(teeth_path).resolve())])
         self.process.start(command[0], args)
 
     def _log(self, data: bytes) -> None:
