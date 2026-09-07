@@ -1,7 +1,7 @@
 [
   {
     "path": "manual-app/README.md",
-    "sha256": "d963d586a2a76e06c14dd923b99b59c11f657c0ac606f0a30359a2b43c794e76"
+    "sha256": "330213ee20899e0885fbd779fe400bdb9820e8f165e4762e81d1ec25e33c320c"
   },
   {
     "path": "manual-app/app/__init__.py",
@@ -9,7 +9,7 @@
   },
   {
     "path": "manual-app/app/ai_worker.py",
-    "sha256": "9a892770579d769c60b4c5e4de5f7efe13c117ee71e1d215066d4aefc8383b2c"
+    "sha256": "97f4ea1cb7cb4af7b2516d712f6e539d35c0974e0728924ce648b2f0b4d5e8ab"
   },
   {
     "path": "manual-app/app/core/__init__.py",
@@ -17,11 +17,11 @@
   },
   {
     "path": "manual-app/app/core/ai_merge.py",
-    "sha256": "b0ce0639b025f94c65accf05c61252c2b3498fcd457aa9256a2d24006748b7ad"
+    "sha256": "b1156c239e9da1014e0a18314837945ad65f129d3ff2dc3e50e179adb6c39cb1"
   },
   {
     "path": "manual-app/app/core/export.py",
-    "sha256": "834a90121225c13644a7f4bde630c027e62124e9e4cb005ef71d0221a9ed8b7b"
+    "sha256": "a6f51cf2d4307033ca617d7cad911ce4293449e0b53557d7ae4d47db33572ca2"
   },
   {
     "path": "manual-app/app/core/formula.py",
@@ -73,7 +73,7 @@
   },
   {
     "path": "manual-app/app/main.py",
-    "sha256": "9474eed1e98cb79a265bf6b67c256e25a92e70e466182e6bd3c2d7dc2adb2bf7"
+    "sha256": "d07d501c2841da20326ff943ee0fed3c1f66e5bffa4e153a9708e558942eee40"
   },
   {
     "path": "manual-app/app/ui/__init__.py",
@@ -81,7 +81,7 @@
   },
   {
     "path": "manual-app/app/ui/ai_client.py",
-    "sha256": "05d904f68a0a87e30101fa2bd834fa0b30d7255c7c55345ad050b0d7df291ea0"
+    "sha256": "a8ca4810c115d97fa4c6654da91eaf768d606079e22009d093b8d794cbfd05f4"
   },
   {
     "path": "manual-app/app/ui/case_panel.py",
@@ -93,7 +93,7 @@
   },
   {
     "path": "manual-app/app/ui/main_window.py",
-    "sha256": "741d6e9184c3efab8753c6d7d62546eb2c6f33524ce8b157674f7e42d7fc1162"
+    "sha256": "81a59687d1a842761c5183d5ade256fc5c0db0b7194c09c23041becc108c909a"
   },
   {
     "path": "manual-app/app/ui/panorama_view.py",
@@ -109,7 +109,7 @@
   },
   {
     "path": "manual-app/app/ui/tooth_dialog.py",
-    "sha256": "b30210c462d86fec17fd97d1b67085644c2bf708ee84e129fe07e8dd6ebde99f"
+    "sha256": "425883f979e6a7bbcf54b4d10c5f69e00201f288a94e9c5aba8969a73c6839ec"
   },
   {
     "path": "manual-app/app/ui/widgets/__init__.py",
@@ -129,7 +129,7 @@
   },
   {
     "path": "manual-app/installer_ai.iss",
-    "sha256": "0956ed3905bfa9277dab6b99f886fb6edab18a2c16a584510a82a41954322adb"
+    "sha256": "6ffdb3a0c36284282be160eeb4c2c77d05f5d45016ea35a063cda8869c469d20"
   },
   {
     "path": "manual-app/models/README.md",
@@ -137,7 +137,7 @@
   },
   {
     "path": "manual-app/packaging/README.md",
-    "sha256": "478dc0e86d6cd62b4dff4c94d683bea05fb721ff1e434b2ed2653153b55a50b4"
+    "sha256": "d0391de4da2f34d577bc691d0beea1992d38e0262316f5f33a5997c40f18e772"
   },
   {
     "path": "manual-app/packaging/ai_gui.spec",
@@ -152,12 +152,20 @@
     "sha256": "280451ab13bc54df9165e9321aee1042e72650daab766487fbb3be7f812d2340"
   },
   {
+    "path": "manual-app/packaging/audit_legacy_installation.py",
+    "sha256": "78e1b8b01dc02c876dd08a3fbfe09e148e6ef03b12f69eee753fb76c59d296d1"
+  },
+  {
     "path": "manual-app/packaging/collect_licenses.py",
     "sha256": "38964c8d9ffac35b2b5a759507e5e51bf50af202aac690ed404e7e87e822cc45"
   },
   {
     "path": "manual-app/packaging/languages/README.md",
     "sha256": "15d41032c2fb3a3d7ed07301ce6a3bfb941a034fe7160894a147a146ae6dad1b"
+  },
+  {
+    "path": "manual-app/packaging/legacy-migration.md",
+    "sha256": "8aaaaee6b74f1e18d90e4a7018faf5c03482cb8cd58a102c4c15d147dc4813ca"
   },
   {
     "path": "manual-app/packaging/licenses/Qt/GPL-3.0.txt",
@@ -173,11 +181,11 @@
   },
   {
     "path": "manual-app/packaging/verify_frozen.ps1",
-    "sha256": "80eb8940f7ae30d7f9df9450d93ffc5365e22be5d33a563e2323af77d764b5d9"
+    "sha256": "c314e843fa64ff8f8ceb98bebde1d7096c166c0c9e2a7f617a54983bfb85742e"
   },
   {
     "path": "manual-app/packaging/verify_shortcuts.ps1",
-    "sha256": "cddcaff6431ddb6cc44209dbc936ab251bc8d120ac8d54c59dea1233a9741005"
+    "sha256": "3375e94c22f5f69fcbbad1344bdbfc4a168fb56390f052a26d73fde4cf6ea348"
   },
   {
     "path": "manual-app/requirements-ai-gui.txt",
@@ -189,7 +197,7 @@
   },
   {
     "path": "manual-app/scripts/build_ai_windows.ps1",
-    "sha256": "d8e216afa35ab200203e6f283bee8e1a1be6c351158ba0cc9502debd8d05e561"
+    "sha256": "d7e5fe652c1157d2969b72464b9f681da0235be50a0e37426741937703171943"
   },
   {
     "path": "manual-app/scripts/package_source.py",
@@ -197,15 +205,19 @@
   },
   {
     "path": "manual-app/tests/probe_real_ui.py",
-    "sha256": "c2920d1ec580f5f5095bcf9d0f2db89bcc9b8041ba3c669c7565728d310224ed"
+    "sha256": "cbbf8c296c65cde945ec92b17aa0f0a0f43b2b1bf226e4107087973317f483b3"
   },
   {
     "path": "manual-app/tests/test_ai_core.py",
-    "sha256": "7164b97d4983f44740d65e07baa1cd58b994f37dd1d09dc41ba1012d3e5ec81e"
+    "sha256": "af41db00233ef5cbffbf29cf9af7690af8ef0d2ac496d3158ba6ef23851f337c"
+  },
+  {
+    "path": "manual-app/tests/test_ai_keypoints_protocol.py",
+    "sha256": "dc3f37741c0d00eb3becd2d2f4e957e8dd722abbde1776f41310e88bc603a979"
   },
   {
     "path": "manual-app/tests/test_ai_ui.py",
-    "sha256": "1cd0c933ab362741bd32dbce8f2ff0dfe83a5802411b8de8caf0152ff0f25255"
+    "sha256": "0e994e1c791daa3540c54a9d06b163e8b9a11460ba4bd072721463a480090801"
   },
   {
     "path": "manual-app/tests/test_canvas_navigation.py",
@@ -216,16 +228,24 @@
     "sha256": "fd5a7c6db9cd904181dfb37595fbcd212c6c11124d5f598b2f09b91bd8477176"
   },
   {
+    "path": "manual-app/tests/test_keypoint_merge.py",
+    "sha256": "ca3e29302178e8354a678fad9e57dc534dbdc24660fe593b79c0f06e1cbf402c"
+  },
+  {
     "path": "manual-app/tests/test_review_geometry.py",
     "sha256": "a1a71a263894b8ed41539e5aabaa45b8867a8631ed29b826114cf3312d07c312"
   },
   {
     "path": "manual-app/tests/test_smoke.py",
-    "sha256": "ebba0b08bbc622adaaf9097fe202db49ecd685b342f6679fb4722a0a87e7847c"
+    "sha256": "4f7930885a3633cae8a08b863ddfd120a5e5c74052bd5793788baba1f1b23b7d"
+  },
+  {
+    "path": "manual-app/tests/test_tooth_progression.py",
+    "sha256": "892308e2a8e8172cb65435fc5c75c276f7e2089ca78ff3aa21d192c817e467e6"
   },
   {
     "path": "manual-app/tests/test_workflow_modes.py",
-    "sha256": "707cf080c088dc8f4cfa9c1b964a767388394bc6402b9442f89f6487d4065b9b"
+    "sha256": "56a8d967d5b7aca0619046d045e97278612f1c616200672fa8df92d8d5706bf9"
   },
   {
     "path": "panodental-backend/README.md",
@@ -262,6 +282,10 @@
   {
     "path": "panodental-backend/scripts/probe_full_inference.py",
     "sha256": "1d079cc6c5d74ca8719edc984fefb35746732899bcddeaf261809cc3d30ac364"
+  },
+  {
+    "path": "panodental-backend/scripts/probe_keypoints_only.py",
+    "sha256": "00a7293fe1d63525f5e7fb24cae71533679c4fc1fbe55948d9f6cfead0d3ba0d"
   },
   {
     "path": "panodental-backend/scripts/probe_pose_context.py",
@@ -305,7 +329,7 @@
   },
   {
     "path": "panodental-backend/src/panodental/boundary.py",
-    "sha256": "3c6d9e9893f9bb7d9b34adfeec9323bb413b88e23b31a559ce7e547187cf6dc8"
+    "sha256": "e9cfd75d860d6aa85defd3c4e3ab9c661e741e437ff001a630d433bbdd41efae"
   },
   {
     "path": "panodental-backend/src/panodental/cli.py",
@@ -329,7 +353,7 @@
   },
   {
     "path": "panodental-backend/src/panodental/inference.py",
-    "sha256": "69a2a4cf898cff1b62a8e134fe108c89190c1350208de38397b04d8cd562dc92"
+    "sha256": "b997ff12479b8e586179816fe1cc46620e3edb5015562d56ef9b032a5375c0ee"
   },
   {
     "path": "panodental-backend/src/panodental/project.py",
@@ -338,6 +362,10 @@
   {
     "path": "panodental-backend/src/panodental/runtime.py",
     "sha256": "5b2b18507fd1213dc2501f798916b28ae86521d3f9e2081ca3bea34a7e7f7639"
+  },
+  {
+    "path": "panodental-backend/src/panodental/tooth_snapshot.py",
+    "sha256": "37128430c61831170928ebd23f1455ef6ceae48b1fc70e674c0481eb66d55f22"
   },
   {
     "path": "panodental-backend/src/panodental/ui/__init__.py",
@@ -378,6 +406,10 @@
   {
     "path": "panodental-backend/tests/test_inference.py",
     "sha256": "1020e3b386a8bc2c104075a59f546c102306325adc344fc1a44a949e7a092ce0"
+  },
+  {
+    "path": "panodental-backend/tests/test_keypoints_mode.py",
+    "sha256": "4adcbdd9c32f2efa21eb0571b06c119e702d5b07e7860a337d7c5945f88ecafa"
   },
   {
     "path": "panodental-backend/tests/test_worker.py",
