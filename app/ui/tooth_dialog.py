@@ -417,7 +417,12 @@ class ToothDialog(QDialog):
             site = self._site(sf)
             label = getattr(site, "display_label", SURFACE_LABEL[sf])
             self.site_heads[sf].setText(f"— {label} —")
-            getattr(self, f"_skip_{sf}").setText(f"跳过{label}（看不清 / 被遮挡）")
+            skip = getattr(self, f"_skip_{sf}")
+            skip.setText("跳过此组（看不清 / 被遮挡）")
+            skip.setToolTip(label)
+            skip.blockSignals(True)
+            skip.setChecked(site.skipped)
+            skip.blockSignals(False)
             box = self.side_boxes[sf]
             box.blockSignals(True)
             box.clear()
@@ -440,7 +445,7 @@ class ToothDialog(QDialog):
         side_label = getattr(self._site(sf), "display_label", SURFACE_LABEL[sf])
         self.hint.setText(f"当前步骤：{n}　{side_label} · {ROLE_LABEL[role]}")
 
-        upper = bool(t.fdi and t.fdi // 10 in (1, 2))
+        upper = bool(t.fdi and t.fdi // 10 in (1, 2, 5, 6))
         self.dir_hint.setText(
             "上颌牙：牙冠在下、根尖朝上，四个点由下往上依次标"
             if upper else

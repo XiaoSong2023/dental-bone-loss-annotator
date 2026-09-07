@@ -128,6 +128,11 @@ class PanoramaView(ZoomCanvas):
                 rect = self.scene_().addRect(QRectF(x, y, w, h), pen)
                 rect.setZValue(5)
                 rect.setOpacity(0.85 if not tooth.complete else 0.45)
+                rect.setToolTip(
+                    "牙框四角（原图像素，已随标注记录）\n"
+                    f"左上 ({x:.2f}, {y:.2f})　右上 ({x+w:.2f}, {y:.2f})\n"
+                    f"右下 ({x+w:.2f}, {y+h:.2f})　左下 ({x:.2f}, {y+h:.2f})"
+                )
                 self._overlay.append(rect)
 
             for site in tooth.sites:

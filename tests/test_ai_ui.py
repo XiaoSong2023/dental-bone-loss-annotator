@@ -123,3 +123,36 @@ def test_busy_ui_binds_case_and_uses_unadjusted_pixels(qtbot, tmp_path, monkeypa
     window._ai_cancelled()
     assert not window._ai_busy and window.btn_auto.isEnabled()
     assert window.ann.teeth == []
+
+
+def test_candidate_review_keeps_raw_and_requires_explicit_side(qtbot):
+    ann = CaseAnnotation(image_width=100, image_height=80)
+    tooth = ann.add_tooth(16, (5, 5, 80, 70))
+    tooth.origin = "model"
+    tooth.segmentation = {"contours": [[[10, 10], [80, 10], [70, 70], [20, 70]]]}
+    site = tooth.site("mesial")
+    site.cej = Pt(20, 20)
+    site.image_side = "image_left"
+    site.side_confirmed = False
+    site.point_meta["cej"] = {
+        "origin": "model", "raw_xy": [20, 20], "edited": False,
+        "review_status": "pending", "history": [], "model_id": "explicit-ui-fixture",
+    }
+    dlg = ToothDialog(np.zeros((80, 100), dtype=np.uint8), ann, ann.teeth[:],
+                      get(ann.formula_id), FormulaConfig())
+    qtbot.addWidget(dlg)
+    editable = dlg.tooth.site("mesial")
+    assert "待确认" in dlg.site_heads["mesial"].text()
+    dlg._on_drag(dlg.tooth, editable, "cej", QPointF(30, 25))
+    assert editable.point_meta["cej"]["raw_xy"] == [20, 20]
+    assert editable.point_meta["cej"]["edited"]
+    assert not editable.side_confirmed
+    assert editable.cej2 is None
+    dlg._confirm_side("mesial", dlg.side_boxes["mesial"].findData("distal"))
+    assert dlg.tooth.site("distal") is editable
+    assert editable.side_confirmed and editable.surface == "distal"
+    assert ann.teeth[0].site("mesial").cej.as_tuple() == (20, 20)
+    dlg.accept()
+    restored = CaseAnnotation.from_dict(ann.to_dict())
+    assert restored.teeth[0].site("distal").cej.as_tuple() == (30, 25)
+    assert restored.teeth[0].site("distal").point_meta["cej"]["raw_xy"] == [20, 20]

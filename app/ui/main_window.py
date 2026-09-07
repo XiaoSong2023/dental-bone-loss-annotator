@@ -252,7 +252,7 @@ class MainWindow(QMainWindow):
         self.btn_pick = QToolButton()
         self.btn_pick.setText("画框选牙  (T)")
         self.btn_pick.setCheckable(True)
-        self.btn_pick.setToolTip("拖出方框把可疑牙位框住，务必含牙冠 + 牙根 + 根尖")
+        self.btn_pick.setToolTip("拖出方框把可疑牙位框住，务必含牙冠 + 牙根 + 根尖；四角原图坐标随标注保存、导出")
         self.btn_pick.toggled.connect(self._toggle_pick)
         bot.addWidget(self.btn_pick)
 
@@ -953,8 +953,7 @@ class MainWindow(QMainWindow):
         if not self.ann.teeth:
             QMessageBox.information(
                 self, "先画框选牙",
-                "请先按 T 打开「画框选牙」，在全景片上拖出 2–3 个方框把可疑牙位框住。\n\n"
-                "提示：绿色的牙槽嵴顶曲线掉得最低的地方，通常就是骨吸收最重的位点。\n"
+                "请先点击「自动分割与三点」，或按 T 手动画框选择牙位。\n\n"
                 "画框时务必把整颗牙框进去（牙冠 + 牙根 + 根尖），放大标点时才不会缺根尖。",
             )
             return
@@ -1213,11 +1212,13 @@ HELP_TEXT = """\
    · 按文件内容 sha1 自动去重
    · 按文件名自然排序：1, 2, 10 而不是 1, 10, 2
 3. 项目 → 导入名册，一次性带入全部年龄
-4. 打开片子即进入画框选牙（按 T 切换），拖出方框框住可疑牙
-5. Enter 开始分步放大标定，每颗牙 6 个点：
-      P1 近中CEJ → P2 近中AC → P3 近中根尖
-      P4 远中CEJ → P5 远中AC → P6 远中根尖
-   第 2 颗牙从 P7 开始，第 3 颗从 P13 开始
+4. 点击「自动分割与三点」生成牙齿轮廓和 CEJ / AC / 根尖候选。
+   也可按 T 手工画框；方框四角原图坐标会保存并一并导出。
+5. 自动候选带「候」标记，直接拖动调整，或 Enter 放大复核。
+   模型的图像左/右需要在放大窗口确认近中/远中；牙位号也可修改。
+   每侧保留 CEJ / CEJ下2mm / AC / 根尖四个手工点位，两侧共8点。
+   自动标注不填写 CEJ下2mm；需要③④公式时请自行补标。
+   放大窗口按「完成标定」应用修改，「取消」放弃本次修改。
 6. Ctrl+Enter 完成本例并自动跳到下一张
 
 【计算】
