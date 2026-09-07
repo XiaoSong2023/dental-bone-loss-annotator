@@ -30,6 +30,8 @@ Qt 与模型依赖在同一进程混用。已安装软件通过 QProcess 调用�
 自带的 ICU/UCRT 等 DLL 混入安装包。Qt 6.11 使用 Windows 系统 ICU；
 携带版本后缀符号的 poppler ICU 不能替代它。每次分析使用 `--clean`，
 不会复用曾被外部 PATH 污染的依赖缓存。
+Assemble 校验目标绝对路径与目录链接状态后完整替换应用内的 `runtime`，
+防止单独重建 Worker 时残留上一次的 DLL。
 
 输出为 `dist/AI-integrated/牙槽骨吸收测量AI_安装包_v1.1.0-ai-preview.exe`，
 带自包含 GUI、CPU Worker、两份模型、开始菜单/桌面快捷方式和卸载程序。

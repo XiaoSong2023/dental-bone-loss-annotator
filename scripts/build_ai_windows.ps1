@@ -59,6 +59,23 @@ try {
         $builtRuntime = Join-Path $aiDist 'worker-build\runtime'
         Require-File (Join-Path $builtRuntime 'PanoDentalWorker.exe')
         $runtimeTarget = Join-Path $bundle 'runtime'
+        $bundleFull = [IO.Path]::GetFullPath($bundle)
+        $runtimeFull = [IO.Path]::GetFullPath($runtimeTarget)
+        if ([IO.Path]::GetDirectoryName($runtimeFull) -ne $bundleFull -or
+            [IO.Path]::GetFileName($runtimeFull) -ne 'runtime' -or
+            !$bundleFull.StartsWith(([IO.Path]::GetFullPath($aiDist) + [IO.Path]::DirectorySeparatorChar),
+                                    [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing unexpected runtime replacement target: $runtimeFull"
+        }
+        if ((Get-Item -LiteralPath $bundleFull).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'Refusing to replace runtime through a linked bundle directory.'
+        }
+        if (Test-Path -LiteralPath $runtimeFull) {
+            if ((Get-Item -LiteralPath $runtimeFull).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw 'Refusing to recursively replace a linked runtime directory.'
+            }
+            Remove-Item -LiteralPath $runtimeFull -Recurse -Force
+        }
         New-Item -ItemType Directory -Path $runtimeTarget -Force | Out-Null
         Get-ChildItem -LiteralPath $builtRuntime -Force | Copy-Item -Destination $runtimeTarget -Recurse -Force
         foreach ($relative in @('chocodo--teeth-segmentation-odontoai\best.pth',
