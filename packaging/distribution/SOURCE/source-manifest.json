@@ -1,0 +1,358 @@
+[
+  {
+    "path": "manual-app/README.md",
+    "sha256": "799ee5e2c96e706660e2cbdb066b83e28be9c498a5865786f766829544c879d9"
+  },
+  {
+    "path": "manual-app/app/__init__.py",
+    "sha256": "e1c98201073eaf1167f28dbca98756a3b78219e67098055572b105afa199f7fc"
+  },
+  {
+    "path": "manual-app/app/ai_worker.py",
+    "sha256": "b179ba2ad9e5141323bba408d53052d87a4be4a327ae39d28b00a733837ede87"
+  },
+  {
+    "path": "manual-app/app/core/__init__.py",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "manual-app/app/core/ai_merge.py",
+    "sha256": "82b11973605149a0b649f1dc3ba5df19f4aee0d38e9fa349ce6771ff3d9735f6"
+  },
+  {
+    "path": "manual-app/app/core/export.py",
+    "sha256": "834a90121225c13644a7f4bde630c027e62124e9e4cb005ef71d0221a9ed8b7b"
+  },
+  {
+    "path": "manual-app/app/core/formula.py",
+    "sha256": "b5815045229f6e0b49eccd3f1f2afff506d387e4360301bcd6be888278c882ce"
+  },
+  {
+    "path": "manual-app/app/core/geometry.py",
+    "sha256": "592563b97ef6e317949827a624f8d81a43526c0b319fba414ab895b6e2198d05"
+  },
+  {
+    "path": "manual-app/app/core/grading.py",
+    "sha256": "760ff1c07552080f455cf6da04eb9dc214090c872fc58f39f2203bb42b65fe8f"
+  },
+  {
+    "path": "manual-app/app/core/models.py",
+    "sha256": "46fd1507c4f45ce0ec0a850b8bbf234f49c1763547b1c57ff03be7d65d396b76"
+  },
+  {
+    "path": "manual-app/app/core/project.py",
+    "sha256": "57078c2392bb8355084015eeba17f8dcc9773ce453a01d78984fac57183ead6c"
+  },
+  {
+    "path": "manual-app/app/core/roster.py",
+    "sha256": "5cc0c917f62c833c2eae0fb971ca8dea033f9ad0c45dcf58316cd83c4cfd6e96"
+  },
+  {
+    "path": "manual-app/app/core/storage.py",
+    "sha256": "c9bf108c2b324a5c789bb694eae667c53add3ee08bb55a853f6a008ac4f5fc04"
+  },
+  {
+    "path": "manual-app/app/imaging/__init__.py",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "manual-app/app/imaging/bonecrest.py",
+    "sha256": "07703e088435807c04a72777082ebce0287a8825960d1b46ee83f51564e63c19"
+  },
+  {
+    "path": "manual-app/app/imaging/loader.py",
+    "sha256": "a40dc7b4f9a70cf98240ad5a7fd979cba93acbe9cec6635ecc764aeb9fe1029d"
+  },
+  {
+    "path": "manual-app/app/imaging/segmenter.py",
+    "sha256": "5c9152b33efb59f64fe810ec55cba17dde53c371da320d6e6dae0bc7bf200d70"
+  },
+  {
+    "path": "manual-app/app/main.py",
+    "sha256": "61565349b0b19542ea87c2d28a331e23dfa34b66af8cb5a355d92eaddd0a74a9"
+  },
+  {
+    "path": "manual-app/app/ui/__init__.py",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "manual-app/app/ui/ai_client.py",
+    "sha256": "afa834d565d9598cef9e149980c2632be594c6f9b0346abd4b5c5531c780a514"
+  },
+  {
+    "path": "manual-app/app/ui/case_panel.py",
+    "sha256": "6222d191a7b32751904c603c0145a9049b6aeeffa64adebb369e0ff22746c857"
+  },
+  {
+    "path": "manual-app/app/ui/inspector_panel.py",
+    "sha256": "94e630adef986805f4f27f6d90a071ed9af5f5c03b3c54207a194de113f3aa83"
+  },
+  {
+    "path": "manual-app/app/ui/main_window.py",
+    "sha256": "159c4bc58737b6400f98c9889179b3871d57e8d90078b15dbd3356abc34bd526"
+  },
+  {
+    "path": "manual-app/app/ui/panorama_view.py",
+    "sha256": "846bf0cb0c8404b99343277363a7157b2aef42ff73fb812f6363e0161bbbdfcf"
+  },
+  {
+    "path": "manual-app/app/ui/settings_dialog.py",
+    "sha256": "e1cbb45fb8d16d1f2321de143772ba6e982c9c6bd3fd3b91e73851bae60b4154"
+  },
+  {
+    "path": "manual-app/app/ui/theme.py",
+    "sha256": "06b835022d14fa5cbcf0393637d5c69a97a0675e13540c44dec578486607a5b5"
+  },
+  {
+    "path": "manual-app/app/ui/tooth_dialog.py",
+    "sha256": "5535fddbba171577f99ec5caaa97c5271a3a0e76552845e84b030e3bbde6361d"
+  },
+  {
+    "path": "manual-app/app/ui/widgets/__init__.py",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "path": "manual-app/app/ui/widgets/imageutil.py",
+    "sha256": "9e14e77cad8d8e6459a8186760e0169a8ade2a839a6fceafdf2e1c43365fd9d8"
+  },
+  {
+    "path": "manual-app/app/ui/widgets/point_item.py",
+    "sha256": "9173e5716d0b1f2824351ecba93243d20ce40631daac08ac4a6296d9b0034a63"
+  },
+  {
+    "path": "manual-app/app/ui/widgets/zoom_canvas.py",
+    "sha256": "256db8346956804ec1221aa9351996760610ac307e69df2b662cc1d0a0bb1293"
+  },
+  {
+    "path": "manual-app/installer_ai.iss",
+    "sha256": "e06df7270e2dd7a3d3cc411c1253db5853811f5d3ec44e08fb92db4d7dbfaf1b"
+  },
+  {
+    "path": "manual-app/models/README.md",
+    "sha256": "87638890f1dc142b02c67352d92c01074d80cc8e0b6e343c63c2d79539d5a6ac"
+  },
+  {
+    "path": "manual-app/packaging/README.md",
+    "sha256": "4b9b074ccd7cf9f7af4e989c18835ee95442fe6905154bc1dc9d207f0bad845a"
+  },
+  {
+    "path": "manual-app/packaging/ai_gui.spec",
+    "sha256": "1a5338e324558656c8474e5cc1e76f9138209c8020202bac704162ad3c950400"
+  },
+  {
+    "path": "manual-app/packaging/ai_worker.spec",
+    "sha256": "737d02a9752771581f392fd15411a5a03e3ada3c8059479382ff29792e2a645b"
+  },
+  {
+    "path": "manual-app/packaging/ai_worker_entry.py",
+    "sha256": "280451ab13bc54df9165e9321aee1042e72650daab766487fbb3be7f812d2340"
+  },
+  {
+    "path": "manual-app/packaging/collect_licenses.py",
+    "sha256": "38964c8d9ffac35b2b5a759507e5e51bf50af202aac690ed404e7e87e822cc45"
+  },
+  {
+    "path": "manual-app/packaging/languages/README.md",
+    "sha256": "15d41032c2fb3a3d7ed07301ce6a3bfb941a034fe7160894a147a146ae6dad1b"
+  },
+  {
+    "path": "manual-app/packaging/licenses/Qt/GPL-3.0.txt",
+    "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+  },
+  {
+    "path": "manual-app/packaging/licenses/Qt/LGPL-3.0.txt",
+    "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+  },
+  {
+    "path": "manual-app/packaging/licenses/Qt/README.md",
+    "sha256": "2331f8b37e5e5fe459203aff81d1939141fd2757652b240767725386c0389646"
+  },
+  {
+    "path": "manual-app/packaging/verify_frozen.ps1",
+    "sha256": "885edcf7d03c68d4f911f4a9ce4463c82ce916f8e23bdc7a42c3d05d858cbe56"
+  },
+  {
+    "path": "manual-app/requirements-ai-gui.txt",
+    "sha256": "7ec8d836e58f012d1349649199b9946f4878a69c348a95ec22730a1994ba089d"
+  },
+  {
+    "path": "manual-app/requirements-ai-worker.txt",
+    "sha256": "394d350df271df7e782eb0f884b570d48b8f62291525260c9afe647bb95598d0"
+  },
+  {
+    "path": "manual-app/scripts/build_ai_windows.ps1",
+    "sha256": "6018da8eeb9f89c1e8ffe99cf1666af8cfcc779f9db1ea96e306c8e57986cc82"
+  },
+  {
+    "path": "manual-app/scripts/package_source.py",
+    "sha256": "74f5f2090e22499bf9e55f90a8a29aa502fe91d894f67ad3eb6ed9e1f53dd165"
+  },
+  {
+    "path": "manual-app/tests/probe_real_ui.py",
+    "sha256": "4f612ab8ad7ef56290b8478fa9513eab9862b6767ff0ebc665f85cac6ba5f97d"
+  },
+  {
+    "path": "manual-app/tests/test_ai_core.py",
+    "sha256": "7164b97d4983f44740d65e07baa1cd58b994f37dd1d09dc41ba1012d3e5ec81e"
+  },
+  {
+    "path": "manual-app/tests/test_ai_ui.py",
+    "sha256": "1cd0c933ab362741bd32dbce8f2ff0dfe83a5802411b8de8caf0152ff0f25255"
+  },
+  {
+    "path": "manual-app/tests/test_core.py",
+    "sha256": "fd5a7c6db9cd904181dfb37595fbcd212c6c11124d5f598b2f09b91bd8477176"
+  },
+  {
+    "path": "manual-app/tests/test_smoke.py",
+    "sha256": "42efa0ae71297b0c1b46e02b3d72bfd79490ff6343211d155e6b1a0db9211768"
+  },
+  {
+    "path": "panodental-backend/README.md",
+    "sha256": "29f611970904f6fb37123267f21c7b915f002af372a1d79a6042a749f0771c82"
+  },
+  {
+    "path": "panodental-backend/pyproject.toml",
+    "sha256": "fe2e9077fe01591eed73ca1bb4defe8983db38357314de06a2225b56a9120ca0"
+  },
+  {
+    "path": "panodental-backend/scripts/build_windows.ps1",
+    "sha256": "371ae2f19c313fb83eec8d985cd48404d2530d2220494cc47c6242ee58f2233b"
+  },
+  {
+    "path": "panodental-backend/scripts/compare_native_segmentation.py",
+    "sha256": "6881b3b53323e794b098c536d76ae74050587b402152655350cff7c109835be1"
+  },
+  {
+    "path": "panodental-backend/scripts/fetch_community_candidates.py",
+    "sha256": "f899b0a347547521bfb5a780127b80ef665b01ab14e7da257ced734eaee069ec"
+  },
+  {
+    "path": "panodental-backend/scripts/inspect_community_candidates.py",
+    "sha256": "0e28991b2049c6beeb1b92ecd9f1c08228d7cee9cf9cb15913302a30904a42ec"
+  },
+  {
+    "path": "panodental-backend/scripts/probe_community_pose.py",
+    "sha256": "7465c914c70cbf06653278f411e7556acd52f3cd1e40dd9d25c130aed0a498e3"
+  },
+  {
+    "path": "panodental-backend/scripts/probe_full_inference.py",
+    "sha256": "aa5c4859539033c64d0687ef72ef67f5f093f23cb7a85d49932234d2f31e2a3c"
+  },
+  {
+    "path": "panodental-backend/scripts/probe_pose_context.py",
+    "sha256": "5084de6aa92fbfd85ad2578cadb3c0dd43922f28473f8a833a9fbf138bc23dff"
+  },
+  {
+    "path": "panodental-backend/scripts/training_preflight.py",
+    "sha256": "d762b6742f544dd0f5795184c14286489ec2229890ca54ea064a5f1e3301dec3"
+  },
+  {
+    "path": "panodental-backend/src/panodental.egg-info/SOURCES.txt",
+    "sha256": "c5f6e3c6f18e4172ab72bd6c7137899bdf47fbf128c1e629d8be53466549163e"
+  },
+  {
+    "path": "panodental-backend/src/panodental.egg-info/dependency_links.txt",
+    "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+  },
+  {
+    "path": "panodental-backend/src/panodental.egg-info/entry_points.txt",
+    "sha256": "4423ab5784ebc57c25fa1b8076bbfe40aabb7a30d03875c8513e0131dbb4c8b0"
+  },
+  {
+    "path": "panodental-backend/src/panodental.egg-info/requires.txt",
+    "sha256": "c15a5737988c66060785d1df7592429975a1ad2558a75866b50c9097c3f53795"
+  },
+  {
+    "path": "panodental-backend/src/panodental.egg-info/top_level.txt",
+    "sha256": "1b4a1f30ef6915823beadba6cd12ef6057e972783e2fe40c73971aa8954875da"
+  },
+  {
+    "path": "panodental-backend/src/panodental/__init__.py",
+    "sha256": "e0c1382116d343686f44570d2885b372f4cc95a550f416d3b1a3c8e41e68b545"
+  },
+  {
+    "path": "panodental-backend/src/panodental/__main__.py",
+    "sha256": "935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d"
+  },
+  {
+    "path": "panodental-backend/src/panodental/audit.py",
+    "sha256": "184c394ec5db1e49c9fbf15897e522831f3d152db157b173c8dabeddf0e93572"
+  },
+  {
+    "path": "panodental-backend/src/panodental/cli.py",
+    "sha256": "561b08514ad80e198e5f957a85bd06d3901de5fff90ff45819c2eaff80139e05"
+  },
+  {
+    "path": "panodental-backend/src/panodental/crops.py",
+    "sha256": "85b9c868f54b8fc66daf21c7ee51be8fb32001eb448359ab3cef110dfaa80e2c"
+  },
+  {
+    "path": "panodental-backend/src/panodental/domain.py",
+    "sha256": "f4131dc30d434b2dc7673329e227056e23fbf86d747728700a0bb39da31ba058"
+  },
+  {
+    "path": "panodental-backend/src/panodental/geometry.py",
+    "sha256": "3a5bf648c9901c8ef580a42449d948729ffdad428a82563907daac527ba5f10b"
+  },
+  {
+    "path": "panodental-backend/src/panodental/imaging.py",
+    "sha256": "ea8cacf83b176e0635d2f57cc19479ccfa6581e3b315dc46567f43ec8d168678"
+  },
+  {
+    "path": "panodental-backend/src/panodental/inference.py",
+    "sha256": "17de6ec2d0f418f8f39e3cfbd84112d4877ba5c8fdec3e952dbb0dcda9b39a04"
+  },
+  {
+    "path": "panodental-backend/src/panodental/project.py",
+    "sha256": "72292e51b7c8a226fb529979e18973502b62417fbfa048854f0525db8753ce05"
+  },
+  {
+    "path": "panodental-backend/src/panodental/runtime.py",
+    "sha256": "5b2b18507fd1213dc2501f798916b28ae86521d3f9e2081ca3bea34a7e7f7639"
+  },
+  {
+    "path": "panodental-backend/src/panodental/ui/__init__.py",
+    "sha256": "6517214571c7a7f6290e4a9c0af265c34644b5e057138cfdb1f36a550d1b068a"
+  },
+  {
+    "path": "panodental-backend/src/panodental/ui/canvas.py",
+    "sha256": "487b95b0d226d894769b64333c760b8b899aeb8bb52dee2053834c220ef4d971"
+  },
+  {
+    "path": "panodental-backend/src/panodental/ui/window.py",
+    "sha256": "982bacfb002b5bbf44211bac4c9be0e0ad44db83034c14c1b1237884dc932f0c"
+  },
+  {
+    "path": "panodental-backend/src/panodental/ui/worker_client.py",
+    "sha256": "b08e9eb3a3f9fcc3c811daae279a727c0cdd502dc64624b465c3840b09461b97"
+  },
+  {
+    "path": "panodental-backend/src/panodental/worker.py",
+    "sha256": "716bf834d6ec54a0ac2126cf6e713373672090547becba966501d64aa6894459"
+  },
+  {
+    "path": "panodental-backend/tests/test_audit.py",
+    "sha256": "0c89da3384bbb30822de22b40d14347f17cd2a366882c8ea39fbe1042c8fabe1"
+  },
+  {
+    "path": "panodental-backend/tests/test_core.py",
+    "sha256": "faf1e0d48a14b4fda5cbadc114590707773be10d506d5b859455c4fd182482fe"
+  },
+  {
+    "path": "panodental-backend/tests/test_gui.py",
+    "sha256": "95f9806fb8ff2efb1475aa1adb5ede0dafccb621cd70ef062ee13d1b4b5139fb"
+  },
+  {
+    "path": "panodental-backend/tests/test_inference.py",
+    "sha256": "1020e3b386a8bc2c104075a59f546c102306325adc344fc1a44a949e7a092ce0"
+  },
+  {
+    "path": "panodental-backend/tests/test_worker.py",
+    "sha256": "ebd7f6329ac2147492ea457f5b44174f3dbcdf0d0584c9be8026d0acdb0bddb4"
+  },
+  {
+    "path": "panodental-backend/uv.lock",
+    "sha256": "a9a37fd132b549b86c475e45dc67bb18ade8b055852f16e6569777b5489823f0"
+  }
+]
