@@ -1,8 +1,9 @@
-; Isolated AI preview installation: keeps the user's existing manual app intact.
+; One shared installation, two explicit annotation modes. Original manual 1.0 stays intact.
 #define AppName "牙槽骨吸收测量AI"
+#define ManualName "牙槽骨吸收测量（分割人工版）"
 #define AppVer GetEnv('APP_VERSION')
 #if AppVer == ""
-  #define AppVer "1.1.0-ai-preview"
+  #define AppVer "1.2.0-preview"
 #endif
 #define AppExe "牙槽骨吸收测量AI.exe"
 #define SrcDir "dist\AI-integrated\PanoDentalAI"
@@ -29,22 +30,25 @@ UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExe}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-CloseApplications=yes
+; Never terminate a user's running annotation session during an upgrade.
+CloseApplications=no
 RestartApplications=no
 
 [Languages]
 Name: "chinese"; MessagesFile: "packaging\languages\ChineseSimplified.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务:"; Flags: checkedonce
+Name: "desktopicon"; Description: "创建自动候选版与分割人工版两个桌面快捷方式"; GroupDescription: "附加任务:"; Flags: checkedonce
 
 [Files]
 Source: "{#SrcDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode full"; WorkingDir: "{app}"; Comment: "自动分割与三点候选，人工复核"
+Name: "{group}\{#ManualName}"; Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode manual"; WorkingDir: "{app}"; Comment: "仅自动分割，人工标注四点"
 Name: "{group}\卸载 {#AppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode full"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "自动分割与三点候选，人工复核"
+Name: "{autodesktop}\{#ManualName}"; Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode manual"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "仅自动分割，人工标注四点"
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "立即运行 {#AppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Parameters: "--annotation-mode manual"; Description: "立即运行 {#ManualName}"; Flags: nowait postinstall skipifsilent

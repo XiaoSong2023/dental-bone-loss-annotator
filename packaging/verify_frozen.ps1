@@ -24,17 +24,33 @@ try {
     $env:PYTHONPATH = $null
     $env:VIRTUAL_ENV = $null
     $env:SELFTEST_QUIET = '1'
-    $env:SELFTEST_OUT = Join-Path $ReportDirectory 'gui-selftest.log'
-    $guiInfo = [Diagnostics.ProcessStartInfo]::new()
-    $guiInfo.FileName = $guiPath
-    $guiInfo.Arguments = '--selftest'
-    $guiInfo.WorkingDirectory = $ReportDirectory
-    $guiInfo.UseShellExecute = $false
-    $gui = [Diagnostics.Process]::Start($guiInfo)
-    if (!$gui.WaitForExit(90000)) { $gui.Kill(); throw 'Packaged GUI selftest timed out.' }
-    if ($gui.ExitCode -ne 0) { throw "Packaged GUI exited with $($gui.ExitCode)." }
-    $guiResult = Get-Content -LiteralPath $env:SELFTEST_OUT -Raw
-    if (!$guiResult.Contains('[selftest] OK')) { throw 'Packaged GUI did not report success.' }
+    $guiChecks = @(
+        @{ name = 'default'; arguments = '--selftest'; expected_mode = 'manual' },
+        @{ name = 'manual'; arguments = '--selftest --annotation-mode manual'; expected_mode = 'manual' },
+        @{ name = 'full'; arguments = '--selftest --annotation-mode full'; expected_mode = 'full' }
+    )
+    $guiResults = @()
+    foreach ($check in $guiChecks) {
+        $env:SELFTEST_OUT = Join-Path $ReportDirectory ('gui-selftest-' + $check.name + '.log')
+        if (Test-Path -LiteralPath $env:SELFTEST_OUT) { Remove-Item -LiteralPath $env:SELFTEST_OUT }
+        $guiInfo = [Diagnostics.ProcessStartInfo]::new()
+        $guiInfo.FileName = $guiPath
+        $guiInfo.Arguments = $check.arguments
+        $guiInfo.WorkingDirectory = $ReportDirectory
+        $guiInfo.UseShellExecute = $false
+        $gui = [Diagnostics.Process]::Start($guiInfo)
+        if (!$gui.WaitForExit(90000)) { $gui.Kill(); throw "Packaged GUI selftest timed out ($($check.name))." }
+        if ($gui.ExitCode -ne 0) { throw "Packaged GUI exited with $($gui.ExitCode) ($($check.name))." }
+        $guiResult = Get-Content -LiteralPath $env:SELFTEST_OUT -Raw
+        if (!$guiResult.Contains('[selftest] OK')) { throw 'Packaged GUI did not report success.' }
+        $modeToken = 'annotation_mode=' + $check.expected_mode
+        if (!$guiResult.Contains($modeToken)) {
+            throw "Packaged GUI did not confirm expected mode $($check.expected_mode) ($($check.name))."
+        }
+        $guiResults += [ordered]@{ entry = $check.name; arguments = $check.arguments;
+            annotation_mode = $check.expected_mode; exit_code = $gui.ExitCode; report = $env:SELFTEST_OUT }
+        Write-Output $guiResult
+    }
 
     $workerInfo = [Diagnostics.ProcessStartInfo]::new()
     $workerInfo.FileName = $workerPath
@@ -60,6 +76,7 @@ try {
         gui_executable = $guiPath
         worker_executable = $workerPath
         gui_exit_code = $gui.ExitCode
+        gui_modes = $guiResults
         worker_exit_code = $worker.ExitCode
         launch_directory = $ReportDirectory
         path_during_test = $env:PATH
@@ -67,8 +84,7 @@ try {
         pythonpath_during_test = $env:PYTHONPATH
         virtual_env_during_test = $env:VIRTUAL_ENV
         checked_at_utc = [DateTime]::UtcNow.ToString('o')
-    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $ReportDirectory 'frozen-launch.json') -Encoding UTF8
-    Write-Output $guiResult
+    } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ReportDirectory 'frozen-launch.json') -Encoding UTF8
     Write-Output $workerOutput
 } finally {
     foreach ($name in $savedEnvironment.Keys) {

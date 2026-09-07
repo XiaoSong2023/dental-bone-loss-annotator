@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$WorkerProject = '',
-    [string]$Version = '1.1.0-ai-preview',
+    [string]$Version = '1.2.0-preview',
     [ValidateSet('All', 'Gui', 'Worker', 'Assemble', 'Installer')]
     [string]$Stage = 'All'
 )
@@ -24,6 +24,17 @@ function Invoke-Native([string]$Program, [string[]]$Arguments) {
 function Require-File([string]$Path) {
     if (!(Test-Path -LiteralPath $Path -PathType Leaf)) { throw "Missing file: $Path" }
 }
+function Assert-NoRunningBundle([string]$Directory) {
+    $prefix = [IO.Path]::GetFullPath($Directory).TrimEnd([IO.Path]::DirectorySeparatorChar) +
+        [IO.Path]::DirectorySeparatorChar
+    $running = @(Get-CimInstance Win32_Process -Property ProcessId, Name, ExecutablePath |
+        Where-Object { $_.ExecutablePath -and
+            $_.ExecutablePath.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) })
+    if ($running.Count) {
+        $ids = ($running | ForEach-Object { "$($_.Name) PID $($_.ProcessId)" }) -join ', '
+        throw "Build output is in use by $ids. Save work and close those instances before rebuilding; no process was terminated."
+    }
+}
 foreach ($folder in @($aiDist, $aiWork)) {
     New-Item -ItemType Directory -Path $folder -Force | Out-Null
 }
@@ -44,17 +55,20 @@ try {
     $env:PYTHONHOME = $null
     if ($Stage -in @('All', 'Gui')) {
         Require-File $guiPython
+        Assert-NoRunningBundle $bundle
         Invoke-Native $guiPython @('-m', 'PyInstaller', (Join-Path $taskRoot 'packaging\ai_gui.spec'),
             '--noconfirm', '--clean', '--distpath', $aiDist, '--workpath', (Join-Path $aiWork 'gui'))
     }
     if ($Stage -in @('All', 'Worker')) {
         Require-File $workerPython
         Require-File (Join-Path $taskRoot 'app\ai_worker.py')
+        Assert-NoRunningBundle (Join-Path $aiDist 'worker-build\runtime')
         Invoke-Native $workerPython @('-m', 'PyInstaller', (Join-Path $taskRoot 'packaging\ai_worker.spec'),
             '--noconfirm', '--clean', '--distpath', (Join-Path $aiDist 'worker-build'),
             '--workpath', (Join-Path $aiWork 'worker'))
     }
     if ($Stage -in @('All', 'Assemble')) {
+        Assert-NoRunningBundle $bundle
         Require-File (Join-Path $bundle '牙槽骨吸收测量AI.exe')
         $builtRuntime = Join-Path $aiDist 'worker-build\runtime'
         Require-File (Join-Path $builtRuntime 'PanoDentalWorker.exe')
@@ -108,6 +122,11 @@ try {
                 bytes = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower() }
         }
         [ordered]@{ version = $Version; platform = 'windows-x64'; device = 'cpu';
+            default_annotation_mode = 'manual';
+            entrypoints = @(
+                [ordered]@{ name = '牙槽骨吸收测量AI'; arguments = '--annotation-mode full' },
+                [ordered]@{ name = '牙槽骨吸收测量（分割人工版）'; arguments = '--annotation-mode manual' }
+            );
             built_at_utc = [DateTime]::UtcNow.ToString('o'); files = @($assets) } |
             ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $aiDist 'bundle-manifest.json') -Encoding UTF8
     }
