@@ -69,6 +69,9 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
     counts = {"added_teeth": 0, "matched_teeth": 0, "points_added": 0, "teeth_without_points": 0}
     if result.get("status") != "completed":
         raise ValueError("只能应用已完整结束的自动结果")
+    mode = result.get("mode", "full")
+    if mode not in ("full", "segmentation", "keypoints"):
+        raise ValueError("未知自动操作")
     run_id = result.get("run_id")
     if not isinstance(run_id, str) or not run_id:
         raise ValueError("自动结果缺少 run_id")
@@ -81,6 +84,7 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
     result_ref = result.get("result_ref")
     relative_root = _relative(result_ref).parent if result_ref else None
     predictions = copy.deepcopy(result.get("teeth", []))
+    existing = {t.tooth_id: t for t in ann.teeth if t.roi is not None}
     seen = set()
     for prediction in predictions:
         ident = prediction.get("instance_id")
@@ -91,7 +95,21 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
         if not all(math.isfinite(v) for v in (a, b, c, d)) or not (0 <= a < c <= width and 0 <= b < d <= height):
             raise ValueError("自动牙框超出原图或无效")
         prediction["bbox_xyxy"] = [a, b, c, d]
-        _score(prediction["score"])
+        if mode != "keypoints" or prediction.get("score") is not None:
+            _score(prediction["score"])
+        if mode == "segmentation" and prediction.get("surfaces"):
+            raise ValueError("仅分割操作不得包含自动标点")
+        if mode == "keypoints":
+            tooth = existing.get(prediction.get("source_tooth_id"))
+            if tooth is None or prediction["source_tooth_id"] != ident:
+                raise ValueError("自动标注结果的牙齿身份与当前选牙不一致")
+            x, y, w, h = tooth.roi
+            if ([a, b, c, d] != [x, y, x+w, y+h]
+                    or prediction.get("contours", []) != tooth.segmentation.get("contours", [])
+                    or prediction.get("fdi") != tooth.fdi
+                    or prediction.get("origin") != tooth.origin
+                    or prediction.get("score") != tooth.segmentation.get("score")):
+                raise ValueError("自动标注结果不得更改当前牙框、轮廓或牙位")
         for contour in prediction.get("contours", []):
             for xy in contour:
                 _xy(xy, width, height)
@@ -106,6 +124,8 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
                     _score(point["score"])
         if prediction.get("mask_ref"):
             _relative(prediction["mask_ref"])
+    if mode == "keypoints" and seen != set(existing):
+        raise ValueError("自动标注结果必须对应本次全部已选牙齿，缺点牙也需保留")
 
     working = copy.deepcopy(ann)
     matched_ids = set()
@@ -113,8 +133,9 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
         box = prediction["bbox_xyxy"]
         a, b, c, d = box
         possible = [tooth for tooth in working.teeth if tooth.tooth_id not in matched_ids]
-        tooth = max(possible, key=lambda t: _match_score(t, prediction), default=None)
-        if tooth is None or _match_score(tooth, prediction) < .5:
+        tooth = (next(t for t in possible if t.tooth_id == prediction["source_tooth_id"])
+                 if mode == "keypoints" else max(possible, key=lambda t: _match_score(t, prediction), default=None))
+        if mode != "keypoints" and (tooth is None or _match_score(tooth, prediction) < .5):
             tooth = working.add_tooth(prediction.get("fdi"), (a, b, c-a, d-b))
             tooth.origin = "model"
             counts["added_teeth"] += 1
@@ -123,15 +144,16 @@ reviewer explicitly confirms them. Existing manually marked groups are preserved
             if tooth.fdi is None:
                 tooth.fdi = prediction.get("fdi")
         matched_ids.add(tooth.tooth_id)
-        if tooth.initial_auto_roi is None:
-            tooth.initial_auto_roi = (a, b, c-a, d-b)
-        mask_ref = prediction.get("mask_ref")
-        if mask_ref and relative_root is not None:
-            mask_ref = str(relative_root / _relative(mask_ref))
-        tooth.segmentation = {"run_id": run_id, "instance_id": prediction["instance_id"],
-                              "score": prediction["score"], "bbox_xyxy": box,
-                              "contours": prediction.get("contours", []), "mask_ref": mask_ref}
-        tooth.segmentation["contour_sha256"] = prediction.get("contour_sha256")
+        if mode != "keypoints":
+            if tooth.initial_auto_roi is None:
+                tooth.initial_auto_roi = (a, b, c-a, d-b)
+            mask_ref = prediction.get("mask_ref")
+            if mask_ref and relative_root is not None:
+                mask_ref = str(relative_root / _relative(mask_ref))
+            tooth.segmentation = {"run_id": run_id, "instance_id": prediction["instance_id"],
+                                  "score": prediction["score"], "bbox_xyxy": box,
+                                  "contours": prediction.get("contours", []), "mask_ref": mask_ref}
+            tooth.segmentation["contour_sha256"] = prediction.get("contour_sha256")
         surfaces = prediction.get("surfaces", [])
         tooth.candidate_surfaces.extend(copy.deepcopy([s | {"run_id": run_id} for s in surfaces]))
         if not surfaces:
