@@ -46,42 +46,6 @@ SITES_HEADER = [
     "是否最重", "跳过", "警告",
 ]
 
-BOX_CORNER_HEADER = [f"框{corner}_{axis}" for corner in ("左上", "右上", "右下", "左下")
-                     for axis in ("x", "y")]
-SITES_HEADER += BOX_CORNER_HEADER
-SITES_HEADER += ["侧别已确认", *[f"{role}_{kind}" for role in ("CEJ", "CEJ2mm", "AC", "APEX")
-                              for kind in ("来源", "置信分数", "人工修正", "原始x", "原始y")], "坐标空间"]
-BOXES_HEADER = ["病例号", "片名", "牙序", "牙位FDI", *BOX_CORNER_HEADER, "坐标空间", "框来源"]
-
-
-def _box_values(tooth) -> list:
-    corners = tooth.roi_corners
-    return [_fmt(v, 6) for name in ("top_left", "top_right", "bottom_right", "bottom_left")
-            for v in corners.get(name, [None, None])]
-
-
-def _point_provenance(site) -> list:
-    values = ["是" if site.side_confirmed else "否"]
-    for role in ("cej", "cej2", "ac", "apex"):
-        info = site.point_meta.get(role, {})
-        raw = info.get("raw_xy") or [None, None]
-        values.extend([info.get("origin", "manual" if site.get(role) else ""), _fmt(info.get("score"), 6),
-                       "是" if info.get("edited") else "否", _fmt(raw[0], 6), _fmt(raw[1], 6)])
-    return [*values, "image_pixels"]
-
-
-def box_rows(project: Project) -> list[list]:
-    """Include box-only teeth even when no landmark has been placed yet."""
-    rows = []
-    for entry in project.sorted_cases():
-        ann = project.load_annotation(entry)
-        for tooth in ann.teeth:
-            rows.append([ann.patient.id or entry.patient_key or entry.case_id, entry.display,
-                         tooth.index + 1, tooth.fdi or "", *_box_values(tooth), "image_pixels",
-                         getattr(tooth, "origin", "manual")])
-    return rows
-
-
 def _fmt(v, nd: int = 4):
     if v is None:
         return ""
@@ -229,8 +193,6 @@ def site_rows(project: Project, cfg: GradingConfig,
                 "★" if site is res.worst_site else "",
                 "是" if site.skipped else "",
                 _warn_text(m),
-                *_box_values(tooth),
-                *_point_provenance(site),
             ])
     return rows
 
@@ -248,11 +210,19 @@ def export_csv(project: Project, cfg: GradingConfig, out_dir: Path | None = None
     out_dir = out_dir or project.exports_dir
     p1 = out_dir / "summary.csv"
     p2 = out_dir / "sites.csv"
-    p3 = out_dir / "boxes.csv"
     write_csv(p1, SUMMARY_HEADER, summary_rows(project, cfg))
     write_csv(p2, SITES_HEADER, site_rows(project, cfg))
-    write_csv(p3, BOXES_HEADER, box_rows(project))
-    return [p1, p2, p3]
+    # Remove only the recognised box table produced by previous app releases.
+    legacy = out_dir / "boxes.csv"
+    if legacy.is_file():
+        old_header = ["病例号", "片名", "牙序", "牙位FDI",
+                      *[f"框{c}_{a}" for c in ("左上", "右上", "右下", "左下") for a in ("x", "y")],
+                      "坐标空间", "框来源"]
+        with legacy.open(encoding="utf-8-sig", newline="", errors="replace") as stream:
+            is_old_export = next(csv.reader(stream), []) == old_header
+        if is_old_export:
+            legacy.unlink()
+    return [p1, p2]
 
 
 def export_excel(project: Project, cfg: GradingConfig, out_path: Path | None = None) -> Path:
@@ -271,7 +241,6 @@ def export_excel(project: Project, cfg: GradingConfig, out_path: Path | None = N
     for title, header, rows in (
         ("患者级汇总", SUMMARY_HEADER, summary_rows(project, cfg)),
         ("位点级明细", SITES_HEADER, site_rows(project, cfg)),
-        ("牙框坐标", BOXES_HEADER, box_rows(project)),
     ):
         ws = wb.create_sheet(title)
         ws.append(header)
@@ -297,11 +266,24 @@ def export_single_json(project: Project, entry: CaseEntry, out_path: Path) -> Pa
 
     额外附上一份 _derived 计算结果做参考，但注明它是派生的、以坐标为准。
     """
-    import json
-
     ann: CaseAnnotation = project.load_annotation(entry)
     res = ann.compute(project.grading)
     d = ann.to_dict()
+    # Export final displayed marks, not editing geometry or model-run coordinates.
+    # The complete annotation remains in the project's annotations/ and runs/.
+    for key in ("bone_crest_curve", "ai_runs", "box_history"):
+        d.pop(key, None)
+    exported_teeth = []
+    for tooth in d["teeth"]:
+        sites = [s for s in tooth["sites"] if s["skipped"] or any(s[r] is not None for r in ("cej", "cej2", "ac", "apex"))]
+        if not sites:
+            continue
+        for site in sites:
+            site.pop("point_meta", None)
+        exported_teeth.append({key: tooth[key] for key in ("fdi", "index", "tooth_id", "color")} | {"sites": sites})
+    d["teeth"] = exported_teeth
+    d["export_kind"] = "landmark_coordinates"
+    d["coordinate_space"] = "image_pixels"
     d["_derived"] = {
         "_note": "派生量，仅供参考。真值以 teeth 里的坐标 + formula.id 重算为准。",
         "schema_version": SCHEMA_VERSION,

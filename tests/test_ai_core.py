@@ -36,27 +36,60 @@ class BoxCoordinatesTests(unittest.TestCase):
         self.assertEqual(tooth.roi_corners["top_right"], [25., 6.])
         self.assertEqual(tooth.site("mesial").cej.as_tuple(), (0., 0.))
 
-    def test_box_only_teeth_export_to_csv_excel_and_json(self):
+    def test_exports_contain_only_current_landmarks_and_keep_internal_boxes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             project = Project.create(root / "项目")
             entry = CaseEntry(case_id="框坐标", image="fixture.png")
             project.cases.append(entry)
             ann = CaseAnnotation(image_width=100, image_height=100)
-            ann.add_tooth(16, (1.25, 2.5, 30., 40.))
+            marked = ann.add_tooth(16, (1.25, 2.5, 30., 40.))
+            marked.site("mesial").set("cej", Pt(8.123456789, 9.5))
+            marked.site("mesial").point_meta["cej"]["raw_xy"] = [1., 2.]
+            ann.add_tooth(15, (40., 2., 20., 40.))
             project.save_annotation(entry, ann)
             paths = export.export_csv(project, project.grading)
-            boxes = next(p for p in paths if p.name == "boxes.csv")
-            with boxes.open(encoding="utf-8-sig", newline="") as stream:
+            self.assertEqual([p.name for p in paths], ["summary.csv", "sites.csv"])
+            with paths[1].open(encoding="utf-8-sig", newline="") as stream:
                 row, = csv.DictReader(stream)
-            self.assertEqual(float(row["框右下_x"]), 31.25)
-            self.assertEqual(float(row["框左下_y"]), 42.5)
+            self.assertEqual(float(row["CEJ_x"]), 8.12)
+            self.assertFalse(any("框" in key or "原始" in key for key in row))
             from openpyxl import load_workbook
             book = load_workbook(export.export_excel(project, project.grading))
-            self.assertEqual(book["牙框坐标"].max_row, 2)
+            self.assertEqual(book.sheetnames, ["患者级汇总", "位点级明细"])
+            self.assertEqual(book["位点级明细"].max_row, 2)
             book.close()
             data = json.loads(export.export_single_json(project, entry, root / "导出.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["teeth"][0]["roi_corners"]["bottom_right"], [31.25, 42.5])
+            self.assertEqual(len(data["teeth"]), 1)
+            self.assertEqual(data["teeth"][0]["sites"][0]["cej"]["x"], 8.123456789)
+            forbidden = {"roi", "roi_corners", "initial_auto_roi", "segmentation", "contours", "box_history", "ai_runs", "candidate_surfaces", "point_meta", "bone_crest_curve"}
+            def keys(value):
+                if isinstance(value, dict):
+                    for key, child in value.items():
+                        yield key
+                        yield from keys(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        yield from keys(child)
+            self.assertFalse(forbidden.intersection(keys(data)))
+            restored = project.load_annotation(entry)
+            self.assertEqual(len(restored.teeth), 2)
+            self.assertEqual(restored.teeth[0].roi_corners["bottom_right"], [31.25, 42.5])
+            self.assertEqual(restored.teeth[0].site("mesial").point_meta["cej"]["raw_xy"], [1., 2.])
+
+    def test_csv_replaces_only_recognised_legacy_box_export(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Project.create(Path(tmp) / "project")
+            legacy = project.exports_dir / "boxes.csv"
+            old_header = ["病例号", "片名", "牙序", "牙位FDI",
+                          *[f"框{c}_{a}" for c in ("左上", "右上", "右下", "左下") for a in ("x", "y")],
+                          "坐标空间", "框来源"]
+            export.write_csv(legacy, old_header, [])
+            export.export_csv(project, project.grading)
+            self.assertFalse(legacy.exists())
+            legacy.write_text("user-owned data", encoding="utf-8")
+            export.export_csv(project, project.grading)
+            self.assertEqual(legacy.read_text(encoding="utf-8"), "user-owned data")
 
 
 def protocol_fixture():
