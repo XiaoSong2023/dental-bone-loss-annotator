@@ -3,7 +3,8 @@
 The binary-log search is supporting evidence, not a parser for Inno's records.
 The legacy source installer and its original bundle define the program payload.
 Every installed file outside that payload and the exact uninstaller filenames is
-treated as user data, including unknown files, and must survive migration.
+identified as user data, including unknown files. Inventory is not authorization
+to remove it; the separately recorded migration decision controls that scope.
 """
 from __future__ import annotations
 
@@ -64,23 +65,24 @@ def main() -> None:
         "install_directory": str(installed), "legacy_bundle": str(legacy_bundle),
         "uninstall_log_header": binary_log[:64].split(b"\0", 1)[0].decode("ascii"),
         "binary_log_search_is_complete_parser": False,
-        "program_files": program, "preserve_files": user,
-        "preserve_directories": sorted(user_directories),
-        "program_file_count": len(program), "preserve_file_count": len(user),
+        "program_files": program, "project_files": user,
+        "project_directories": sorted(user_directories),
+        "program_file_count": len(program), "project_file_count": len(user),
         "program_bytes": sum(item["bytes"] for item in program),
-        "preserve_bytes": sum(item["bytes"] for item in user),
+        "project_bytes": sum(item["bytes"] for item in user),
         "user_paths_found_in_binary_log": [item["path"] for item in user
                                           if item["literal_path_present_in_uninstall_dat"]],
-        "safety_rule": "Back up and hash every preserve_file before normal legacy uninstall; "
-                       "verify every file afterwards; never recursively delete the install root.",
+        "safety_rule": "Inventory is not deletion authorization. Normal uninstall removes the "
+                       "program; project deletion requires explicit authorization, a verified "
+                       "replacement, and exact-path/process/link checks.",
     }
     report.mkdir(parents=True, exist_ok=True)
     (report / "legacy-audit.json").write_text(json.dumps(result, ensure_ascii=False, indent=2),
                                              encoding="utf-8")
-    for name, entries in (("legacy-program-files.txt", program), ("preserve-project-files.txt", user)):
+    for name, entries in (("legacy-program-files.txt", program), ("legacy-project-files.txt", user)):
         (report / name).write_text("\n".join(item["path"] for item in entries) + "\n", encoding="utf-8")
     print(json.dumps({key: result[key] for key in (
-        "program_file_count", "program_bytes", "preserve_file_count", "preserve_bytes",
+        "program_file_count", "program_bytes", "project_file_count", "project_bytes",
         "user_paths_found_in_binary_log")}, ensure_ascii=False))
 
 
