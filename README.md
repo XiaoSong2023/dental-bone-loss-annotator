@@ -3,11 +3,16 @@
 用于牙周病研究的批量标注与测量工具，支持**全景片**与**根尖片（小牙片）**两种片型。
 读片 → 画框选牙 → 分步放大标 8 个点 → 四个公式同时出结果 → 批量导出。
 
+当前 1.2 版增加自动分割人工标点、自动候选两个入口，共用原有四点/四公式。
+使用 `dist/AI-integrated/牙槽骨吸收测量AI_安装包_v1.2.0-preview.exe`；
+完整操作见 [1.2 使用说明](packaging/distribution/使用说明.md)，开发交接见 STATUS.md、HANDOFF.md。
+自动候选的轮廓投影是几何校正，尚未验证解剖准确率；缺点需要人工补标。
+
 ---
 
 ## 快速开始
 
-**只是想用**：拿 `dist\牙槽骨吸收测量_安装包_v1.0.0.exe` 双击安装即可，
+**只是想用**：拿上述 1.2 安装包双击安装即可，
 不需要下面这些（见「打包与分发」）。
 
 **要改代码**：
@@ -19,6 +24,9 @@ python -m venv .venv
 
 :: 2. 跑起来
 .venv\Scripts\python.exe -m app.main
+
+:: 自动候选入口（默认入口为分割人工版）
+.venv\Scripts\python.exe -m app.main --annotation-mode full
 
 :: 自检（也可用于验证打包产物）
 .venv\Scripts\python.exe -m app.main --selftest
