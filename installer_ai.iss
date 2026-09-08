@@ -19,6 +19,7 @@ UsePreviousGroup=no
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 DefaultDirName={autopf}\{#InstallDirName}
+UsePreviousAppDir=yes
 OutputDir=dist\AI-integrated
 OutputBaseFilename={#AppName}_安装包_v{#AppVer}
 Compression=lzma2/fast
@@ -42,7 +43,17 @@ Name: "chinese"; MessagesFile: "packaging\languages\ChineseSimplified.isl"
 Name: "desktopicon"; Description: "创建牙槽骨吸收测量桌面快捷方式"; GroupDescription: "附加任务:"; Flags: checkedonce
 
 [Files]
-Source: "{#SrcDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Install only application assets. A project accidentally placed in the build
+; folder must never be bundled over a user's project.json/images/annotations.
+; The manual 1.0 installation and all user project folders remain in place;
+; the same public shortcut names below point to this unified application.
+Source: "{#SrcDir}\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SrcDir}\使用说明.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SrcDir}\_internal\*"; DestDir: "{app}\_internal"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SrcDir}\runtime\*"; DestDir: "{app}\runtime"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SrcDir}\models\*"; DestDir: "{app}\models"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SrcDir}\SOURCE\*"; DestDir: "{app}\SOURCE"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SrcDir}\THIRD_PARTY\*"; DestDir: "{app}\THIRD_PARTY"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [InstallDelete]
 ; Exact obsolete shortcuts only. Never remove an installation/project directory.

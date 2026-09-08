@@ -174,6 +174,8 @@ class Project:
     @classmethod
     def create(cls, root: Path) -> "Project":
         p = cls(root)
+        if p.root.exists() and any(p.root.iterdir()):
+            raise FileExistsError("所选文件夹不是空文件夹。已有病例请使用“打开项目”，以保留原有图片、标点和完成状态。")
         for d in (p.images_dir, p.annotations_dir, p.exports_dir, p.grading_file.parent):
             d.mkdir(parents=True, exist_ok=True)
         p.created = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -186,15 +188,24 @@ class Project:
         root = Path(root)
         p = cls(root)
         d = storage.read_json(p.project_file)
-        if d is None:
-            return cls.create(root)
+        if not isinstance(d, dict):
+            raise ValueError("找不到可读取的 project.json；未创建或覆盖任何项目文件。请选择原项目文件夹。")
+        try:
+            version = int(d.get("version", 1))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("项目版本信息损坏；原文件保持不变。") from exc
+        if version > PROJECT_VERSION:
+            raise ValueError("项目来自更新的软件版本，请更新软件后打开。")
+        if not isinstance(d.get("cases"), list) or not isinstance(d.get("settings", {}), dict):
+            raise ValueError("项目索引格式损坏；原文件保持不变。")
         p.name = d.get("name", root.name)
         p.created = d.get("created", "")
-        p.settings = ProjectSettings.from_dict(d.get("settings", {}))
-        p.cases = [CaseEntry.from_dict(c) for c in d.get("cases", [])]
+        try:
+            p.settings = ProjectSettings.from_dict(d.get("settings", {}))
+            p.cases = [CaseEntry.from_dict(c) for c in d["cases"]]
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            raise ValueError("项目病例索引格式损坏；原文件保持不变。") from exc
         p.grading = GradingConfig.load(p.grading_file)
-        for dd in (p.images_dir, p.annotations_dir, p.exports_dir):
-            dd.mkdir(parents=True, exist_ok=True)
         return p
 
     def save(self) -> None:
