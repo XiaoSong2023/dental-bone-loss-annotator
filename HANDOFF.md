@@ -1,3 +1,25 @@
+## 2026-09-08 最新接力：1.4.0 完成Windows更新，准备在Mac继续开发
+
+用户最新要求：导出同时打包有框/轮廓/彩色当前点的影像；交互放大时点固定；所有旧项目和已完成状态保留（覆盖旧清理授权）；修复首人名册信息；本轮完成后转到Mac继续开发。EXE不能用作Mac源码，给源码+模型接力包。
+
+目标工程 D:/Codex 项目集合/全景片标注加距离测量软件开发。产品提交：ea5dfe8名册修复、7b32d18安装/项目保护、8b40176图片核心、f64bd6d UI后台导出与发布回滚、3576c07打包文档、9ed4fef内置SOURCE；Mac脚本与说明69e6561。模型/后端推理代码未修改，训练0步。
+
+- app/core/annotated_export.py: export_annotated_images(project,out_dir=None,entries=None,adjust=None,progress=None)->(Path,count)。默认全部病例，空/未完成也包含，缺点不补。entries指定时ZIP用selected哈希名避免单例覆盖整批。PNG是静态预览，HTML内SVG+反向缩放固定点/编号；禁止把PNG说成点不随图缩放。
+- app/ui/export_job.py: 保存当前编辑后QThread读取项目，UI与自动保存暂停；所有输出先写同输出目录的.export-*，全部成功才publish_files。锁文件错误回滚，若回滚失败则ExportRecoveryError保留previous备份并告知目录，不得在finally删掉恢复材料。UIcloseEvent在导出期间拒绝退出避免销毁线程。
+- 坐标表继续只summary/sites，不写框四角；JSON同样仅当前标点。图片ZIP可以展示完整几何。图像使用软件相同灰度加载与本次ImageAdjust，不改原片。当前标点/原始raw和历史仍在项目内部按原契约保存。
+- installer_ai.iss沿用AI AppId/目录、UsePreviousAppDir=yes、仅程序资产白名单、CloseApplications=no。旧手工1.0不卸载，原目录与项目不搬迁；同名公共快捷方式覆盖为新版。不要执行旧卸载/清理文档的历史流程，packaging/legacy-migration.md已重写。
+- project_discovery.discover_existing_projects(last_project)只读已知路径，显式打开；不自动恢复项目。create拒绝非空目录；open拒绝损坏/缺失/高版本project.json且不写盘。原schema1/2/3/5以及images/done物理归档兼容验证通过。
+- 名册无需再改：本轮开始旧安装还1.3.0；已原位安装包含修复的1.4.0。现有001缺资料的用户项目只需重新导入原名册，不能替用户猜年龄性别。本次真实QA人口资料是工程夹具，不用于医学结论。
+
+验收：图片核心8项、升级保留19项、名册6项、最终UI导出7项通过，组合34项和原core/smoke通过；真实Windows锁文件3种场景保留/回滚正确。原生冻结GUI真实导入和CSV+ZIP导出，31牙/68点/22CSV行，项目done和原图SHA保持，见reports/release-v1.4/native-verification.json。浏览器实际缩放41%至281%点直径恒10px，48点误差<0.001px，见reports/annotated-export-v1.3.2/browser-acceptance.json（目录名是工程报告历史命名，产品为1.4）。CLI拒绝file://后原样HTML通过setContent在真实浏览器渲染；不是直接双击文件验收。未跑新模型或训练。
+
+已装1.4.0，2535程序资产匹配构建manifest；953用户项目文件SHA/大小全部保持，79片/19已完成。净PATHGUI1.53s、CPU Worker健康、唯一快捷方式验证通过。reports/release-v1.4/installed-version.png确认实际已安装版本。last_project已恢复用户实际项目，settings-restored.json可核验；新安装空白窗口留给用户，无待完成导出/推理。
+
+Windows包 dist/AI-integrated/牙槽骨吸收测量_安装包_v1.4.0-preview.exe，SHA256 8f289abd740daaa535e122493778a45c6910e54d32e5fb1f0ecda2fba5d8dc49。
+Mac传输包 dist/Mac-handoff/PanoDental-Mac-Development-1.4.0-preview.zip，使用已提交脚本从当前git跟踪源码白名单、固定两权重生成。包内MANIFEST含源提交与逐文件SHA；不包含患者或Windows运行库。以后在Mac解压，先读MAC_HANDOFF.md，建立新的GUI/backend环境，修正ai_client.runtime_paths与worker路径，再验证CPU链路并构建app/DMG。当前Mac未构建/未签名/未公证，不能声称复制EXE即可Mac运行；本轮不自动开始Mac开发。
+
+下面旧状态保留为历史，最新数据保留与Mac接力要求优先。
+
 ## 2026-09-07 最新接力：1.3.1 修复已完成，原生验收被用户停止
 
 当前任务是修复名册导入后当前病例（通常 001）年龄/性别被旧空值覆盖。目标工程为 D:/Codex 项目集合/全景片标注加距离测量软件开发；修复 ea5dfe8、打包 404759d。根因与已通过测试见最新 STATUS。不要重新研究 Excel 列识别、训练或修改模型。

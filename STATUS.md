@@ -1,3 +1,20 @@
+## 2026-09-08：1.4.0 已安装，带标注图片导出与旧项目保留完成
+
+本节覆盖下方旧状态和删除旧病例授权。本轮用户要求所有已登记、标点、图片、已完成状态保留；之后希望在 Mac 继续开发，不是将 EXE 转为 DMG。
+
+- CSV 导出同时产出 summary.csv、sites.csv、annotated_images.zip；Excel 与单例 JSON 同样附图片 ZIP，单例用独立名称，不覆盖整批包。ZIP 含 PNG 静态图、自包含 HTML 查看页、index、清单及说明。绘制实际当前框、轮廓、彩色点与编号，不取 raw/初始框或补造缺点；坐标表仍不导出矩形角。
+- HTML 页内缩放保持标点/编号屏幕大小，PNG 是普通静态图片。真实浏览器按钮/滚轮测得41%→100%→196%→281%时标点直径恒为10px，48点映射误差<0.001px，实际拖动(-130,+80)对齐不变，console零错误/警告、零网络请求。CLI禁止file://，浏览器使用原样HTML的setContent进行实际渲染和交互，并非直接双击本地HTML；没有启动HTTP服务。
+- 后台线程导出；整批图片和坐标暂存成功才发布，Excel锁文件时回滚，回滚也被阻止则保留恢复目录。7项UI导出/项目入口回归通过；真实Windows文件锁验证了summary锁定、sites锁定后的回滚、回滚失败时备份保留。
+- 安装白名单只覆盖程序载荷，沿用AI AppId/目录。最早纯手工版共用快捷入口指向新版，旧目录与数据原地保留，不卸载/搬迁。显式“打开已有／旧版项目”发现原项目；空白启动不变。Project.create拒绝非空目录，Project.open不再把损坏/缺失索引变成空项目。19项旧schema/逻辑及物理done/原文件哈希保留测试通过，原core/smoke全通过。
+- 名册复核确认本轮开始仍装1.3.0（1.3.1上轮未安装）。本次包含ea5dfe8修复，Excel/CSV×当前第1/2/3例6项回归通过；实际冻结GUI中的001从年龄性别空值导入为61/女，保存、导出、退出后仍保留。人口资料为工程夹具，不代表实际患者。
+- 8项图片核心回归通过；导出/名册/现有工作流及逐牙组合34项通过，发布回滚加固后的相关UI7项再次通过。独立冻结GUI真实打开QA的已完成病例、导入Excel、点击CSV导出成功；31牙全部几何与68个当前点不变，CSV22行，PNG2440×1292；HTML坐标逐点精确匹配，原图SHA不变。证据 reports/release-v1.4/native-verification.json 及 native-*.png。
+- 1.4.0-preview安装exit0。2,535安装文件与构建manifest逐项SHA/大小一致；原用户项目953文件逐项SHA/大小不变，共79片，19已完成。核验 reports/release-v1.4/installation-preservation.json。没有删除任何病例、用户图片、标注或旧手工版数据。
+- 安装后净PATH空白启动自检1.53s；Worker两模型SHA、CPU NMS/ROIAlign/ORT健康全通过，训练0步。实际安装EXE已观察空白启动与关于1.4.0-preview。共享last_project已恢复实际用户项目，未遗留QA路径；唯一桌面/开始菜单入口核验通过。当前留有新版空白窗口供用户继续，无推理/构建任务。
+- Windows安装包：dist/AI-integrated/牙槽骨吸收测量_安装包_v1.4.0-preview.exe，446568381字节，SHA256 8f289abd740daaa535e122493778a45c6910e54d32e5fb1f0ecda2fba5d8dc49。随包SOURCE含113源码文件。
+- Mac接力：scripts/package_mac_handoff.py、docs/MAC_HANDOFF.md；交付路径 dist/Mac-handoff/PanoDental-Mac-Development-1.4.0-preview.zip。内容为gui/backend源码、依赖、两份固定SHA模型和许可；排除患者数据、Windows exe/DLL/runtime/.venv。Mac尚未构建、未产DMG，旧build_macos脚本仅人工版参考，AI worker路径和Mac依赖需在Mac适配验证。
+
+以下均为历史记录，不得继续执行旧病例清理，也不要把1.3.1未安装状态当本轮结论。
+
 ## 2026-09-07：1.3.1 名册导入修复（已构建，尚未安装）
 
 本节为最新状态；下方 1.3.0 安装及清理记录属于此前交付。
