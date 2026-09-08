@@ -1,7 +1,7 @@
 [
   {
     "path": "manual-app/README.md",
-    "sha256": "6f23c8be34faa6bb2889b1a8c19121e9f5c64aaa3dc81dd74a2715976ea6cb5a"
+    "sha256": "a956f22e8f912728835003879da66d02158b241baa0f54ab5a47fcaf4f9a316f"
   },
   {
     "path": "manual-app/app/__init__.py",
@@ -18,6 +18,10 @@
   {
     "path": "manual-app/app/core/ai_merge.py",
     "sha256": "b1156c239e9da1014e0a18314837945ad65f129d3ff2dc3e50e179adb6c39cb1"
+  },
+  {
+    "path": "manual-app/app/core/annotated_export.py",
+    "sha256": "e43a32bbbde15ec2145c28a293756158979b96960ac12d6aa05e8e460985df69"
   },
   {
     "path": "manual-app/app/core/export.py",
@@ -41,7 +45,11 @@
   },
   {
     "path": "manual-app/app/core/project.py",
-    "sha256": "57078c2392bb8355084015eeba17f8dcc9773ce453a01d78984fac57183ead6c"
+    "sha256": "b49e14405a4aae925d0ef87d64767abc827afdfaee9193319c2fe980a4cdc815"
+  },
+  {
+    "path": "manual-app/app/core/project_discovery.py",
+    "sha256": "d950643202e8eac7a973875b0365f9b5080fe08266bcad630882177d05ad28a5"
   },
   {
     "path": "manual-app/app/core/review_geometry.py",
@@ -88,12 +96,16 @@
     "sha256": "6222d191a7b32751904c603c0145a9049b6aeeffa64adebb369e0ff22746c857"
   },
   {
+    "path": "manual-app/app/ui/export_job.py",
+    "sha256": "329a503c54154f6a5c762d93a0ef573d096988d4dbdbc3f171e350bef509e08d"
+  },
+  {
     "path": "manual-app/app/ui/inspector_panel.py",
     "sha256": "94e630adef986805f4f27f6d90a071ed9af5f5c03b3c54207a194de113f3aa83"
   },
   {
     "path": "manual-app/app/ui/main_window.py",
-    "sha256": "933cfeda363008dbd6e0608821753a613426e3a482e587d9a6d80512eff954e7"
+    "sha256": "2f0d1bf558f568c069fdf62a990c82a2d85857c1e46ece73c722348973308dd7"
   },
   {
     "path": "manual-app/app/ui/panorama_view.py",
@@ -129,7 +141,7 @@
   },
   {
     "path": "manual-app/installer_ai.iss",
-    "sha256": "1e541257d68d77edc0803975824e1c93059abbf771b7f2263f84e616bdc94ab2"
+    "sha256": "9e7e0325da79748c9ef4a4698edc5c9cbb39d9e236af39990856bf350d20f19e"
   },
   {
     "path": "manual-app/models/README.md",
@@ -137,7 +149,7 @@
   },
   {
     "path": "manual-app/packaging/README.md",
-    "sha256": "dcd7e44a6a0a7e9c37c674da113b7464f40d2d78036d1816ad86f66110c0bfed"
+    "sha256": "1deba171d1508062ac90070f58a0d06d552e40de2319d40bf385899b6c4e81d7"
   },
   {
     "path": "manual-app/packaging/ai_gui.spec",
@@ -165,7 +177,7 @@
   },
   {
     "path": "manual-app/packaging/legacy-migration.md",
-    "sha256": "8aaaaee6b74f1e18d90e4a7018faf5c03482cb8cd58a102c4c15d147dc4813ca"
+    "sha256": "52559472bcb855a30ee52f7d4e412d624090d20854717e45e46ca58f54a4f1cc"
   },
   {
     "path": "manual-app/packaging/licenses/Qt/GPL-3.0.txt",
@@ -197,7 +209,11 @@
   },
   {
     "path": "manual-app/scripts/build_ai_windows.ps1",
-    "sha256": "834cbc0d724d3a4ccaf7f057108fd16313623c87bab3e56f2051eace56273dd7"
+    "sha256": "92f3fe9489faee228869ea61d718f9da59e9d2ab8c7ca53c0c0928f1db7b95a8"
+  },
+  {
+    "path": "manual-app/scripts/package_mac_handoff.py",
+    "sha256": "9638059e06233fc2b77d47e5b14c171138391add618cadfd0200cf315f8a6668"
   },
   {
     "path": "manual-app/scripts/package_source.py",
@@ -220,12 +236,20 @@
     "sha256": "0e994e1c791daa3540c54a9d06b163e8b9a11460ba4bd072721463a480090801"
   },
   {
+    "path": "manual-app/tests/test_annotated_export.py",
+    "sha256": "a5c8a829606ef96744d114732bf4862a74167ba1957034842476cf51abd8c941"
+  },
+  {
     "path": "manual-app/tests/test_canvas_navigation.py",
     "sha256": "96edd9be6a9b77ca2cd8c89b0493bad62e964c9cccfb7c15a7a8decd3e3bc395"
   },
   {
     "path": "manual-app/tests/test_core.py",
     "sha256": "fd5a7c6db9cd904181dfb37595fbcd212c6c11124d5f598b2f09b91bd8477176"
+  },
+  {
+    "path": "manual-app/tests/test_export_bundle_ui.py",
+    "sha256": "1112d88bac595d0a2331c71876f9ff0f26ade5d8d06da4286a0600acbf9a53c8"
   },
   {
     "path": "manual-app/tests/test_keypoint_merge.py",
@@ -246,6 +270,10 @@
   {
     "path": "manual-app/tests/test_tooth_progression.py",
     "sha256": "892308e2a8e8172cb65435fc5c75c276f7e2089ca78ff3aa21d192c817e467e6"
+  },
+  {
+    "path": "manual-app/tests/test_upgrade_preservation.py",
+    "sha256": "b0201d07651fd08d01164e123e6c76035e1d5ac6cba3637b7a7c22990882bcd2"
   },
   {
     "path": "manual-app/tests/test_workflow_modes.py",
