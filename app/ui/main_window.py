@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QProgressDialog,
     QSlider,
     QSplitter,
     QStatusBar,
@@ -40,8 +41,8 @@ from PySide6.QtWidgets import (
     QWidgetAction,
 )
 
-from ..core import export as exporter
 from ..core import roster as roster_mod
+from ..core.project_discovery import discover_existing_projects
 from ..core.formula import FORMULAS, choices as formula_choices, get as get_formula
 from ..core.models import CaseAnnotation, Pt, Tooth
 from ..core.review_geometry import (constrain_pending_candidates, replacement_candidates,
@@ -61,6 +62,7 @@ from ..imaging.segmenter import guess_fdi
 from . import theme as T
 from .ai_client import AiClient
 from .case_panel import CasePanel
+from .export_job import ExportJob
 from .inspector_panel import InspectorPanel
 from .panorama_view import MODE_PICK, MODE_VIEW, MODE_HAND, PanoramaView
 from .settings_dialog import SettingsDialog
@@ -89,6 +91,8 @@ class MainWindow(QMainWindow):
         self._dirty = False
         self._sidebar_width = 320
         self._ai_busy = False
+        self._export_busy = False
+        self._export_job = None
         self._ai_context = None
         self._ai = AiClient(self)
         self._ai.progress.connect(self._ai_progress)
@@ -158,6 +162,7 @@ class MainWindow(QMainWindow):
         fm = m.addMenu("项目(&P)")
         self._act(fm, "新建项目…", self.new_project, "Ctrl+N")
         self._act(fm, "打开项目…", self.open_project, "Ctrl+O")
+        self._act(fm, "打开已有／旧版项目…", self.open_existing_project)
         fm.addSeparator()
         self.act_import = self._act(fm, "批量导入全景片…", self.import_images, "Ctrl+I")
         self.act_roster = self._act(fm, "导入名册（年龄/性别）…", self.import_roster)
@@ -167,9 +172,9 @@ class MainWindow(QMainWindow):
         self._act(fm, "退出", self.close)
 
         em = m.addMenu("导出(&E)")
-        self.act_csv = self._act(em, "导出 CSV（汇总 + 位点明细）", self.export_csv)
-        self.act_xlsx = self._act(em, "导出 Excel", self.export_excel)
-        self.act_json = self._act(em, "导出当前病例 JSON…", self.export_json)
+        self.act_csv = self._act(em, "导出 CSV + 标注图片 ZIP", self.export_csv)
+        self.act_xlsx = self._act(em, "导出 Excel + 标注图片 ZIP", self.export_excel)
+        self.act_json = self._act(em, "导出当前病例 JSON + 标注图片…", self.export_json)
 
         vm = m.addMenu("视图(&V)")
         self.act_sidebar = self._act(vm, "显示 / 隐藏病例列表", self.toggle_sidebar, "Ctrl+B")
@@ -428,7 +433,12 @@ class MainWindow(QMainWindow):
         d = QFileDialog.getExistingDirectory(self, "选择一个空文件夹作为项目目录")
         if not d:
             return
-        self._load_project(Project.create(Path(d)))
+        try:
+            project = Project.create(Path(d))
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "无法新建项目", str(exc))
+            return
+        self._load_project(project)
         QMessageBox.information(
             self, "项目已创建",
             "接下来把全景片一次性拖进窗口（或用「批量导入全景片」），\n"
@@ -438,10 +448,34 @@ class MainWindow(QMainWindow):
     def open_project(self) -> None:
         d = QFileDialog.getExistingDirectory(self, "打开项目文件夹")
         if d:
-            self._load_project(Project.open(Path(d)))
+            self._open_project_path(Path(d))
+
+    def _open_project_path(self, path: Path) -> None:
+        try:
+            project = Project.open(path)
+        except (OSError, ValueError) as exc:
+            QMessageBox.warning(self, "无法打开项目", str(exc))
+            return
+        self._load_project(project)
+
+    def open_existing_project(self) -> None:
+        last = QSettings(ORG, APP).value("last_project", "")
+        candidates = discover_existing_projects(last)
+        if not candidates:
+            self.open_project()
+            return
+        if len(candidates) == 1:
+            self._open_project_path(candidates[0])
+            return
+        selected, ok = QInputDialog.getItem(
+            self, "打开已有／旧版项目", "选择原项目文件夹（保留已完成状态）：",
+            [str(path) for path in candidates], 0, False,
+        )
+        if ok:
+            self._open_project_path(Path(selected))
 
     def _load_project(self, project: Project) -> None:
-        if self._ai_busy:
+        if self._ai_busy or self._export_busy:
             return
         self.save_current(silent=True)
         self.project = project
@@ -1266,43 +1300,76 @@ class MainWindow(QMainWindow):
             self._set_hint("设置已保存。如需对全部病例生效，请执行「工具 → 全部重算」。")
 
     def export_csv(self) -> None:
-        if self.project is None:
-            return
-        self.save_current(silent=True)
-        try:
-            paths = exporter.export_csv(self.project, self.project.grading)
-        except OSError as e:
-            QMessageBox.critical(self, "导出失败", str(e))
-            return
-        QMessageBox.information(self, "导出完成",
-                                "已导出：\n" + "\n".join(str(p) for p in paths))
+        self._start_export("csv")
 
     def export_excel(self) -> None:
-        if self.project is None:
-            return
-        self.save_current(silent=True)
-        try:
-            p = exporter.export_excel(self.project, self.project.grading)
-        except (OSError, ImportError) as e:
-            QMessageBox.critical(self, "导出失败", str(e))
-            return
-        QMessageBox.information(self, "导出完成", f"已导出：\n{p}")
+        self._start_export("excel")
 
     def export_json(self) -> None:
         if self.project is None or self.entry is None:
             return
-        self.save_current(silent=True)
         path, _ = QFileDialog.getSaveFileName(
             self, "导出当前病例 JSON",
             str(self.project.exports_dir / f"{self.entry.case_id}.json"), "JSON (*.json)",
         )
         if path:
-            exporter.export_single_json(self.project, self.entry, Path(path))
-            self._set_hint(f"已导出 {path}")
+            self._start_export("json", Path(path))
+
+    def _start_export(self, kind: str, json_path: Path | None = None) -> None:
+        if self.project is None or self._ai_busy or self._export_busy:
+            return
+        try:
+            self.save_current(silent=True)
+        except (OSError, ValueError) as exc:
+            QMessageBox.critical(self, "无法保存，导出未开始", str(exc))
+            return
+        self._export_busy = True
+        self._autosave.stop()
+        self._update_enabled()
+        self._export_progress = QProgressDialog("准备导出标注图片…", "", 0, 0, self)
+        self._export_progress.setWindowTitle("导出数据与标注图片")
+        self._export_progress.setCancelButton(None)
+        self._export_progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._export_progress.setAutoClose(False)
+        self._export_progress.setAutoReset(False)
+        self._export_progress.show()
+        self._export_job = ExportJob(
+            self.project.root, kind, deepcopy(self._adjust),
+            self.entry.case_id if self.entry else None, json_path, self,
+        )
+        self._export_job.progress.connect(self._export_progress_changed)
+        self._export_job.finished.connect(self._export_finished)
+        self._export_job.start()
+
+    def _export_progress_changed(self, done: int, total: int) -> None:
+        self._export_progress.setRange(0, max(1, total))
+        self._export_progress.setValue(done)
+        self._export_progress.setLabelText(f"正在导出标注图片：{done} / {total}")
+
+    def _export_finished(self) -> None:
+        job = self._export_job
+        self._export_job = None
+        self._export_progress.close()
+        self._export_progress.deleteLater()
+        self._export_busy = False
+        self._autosave.start()
+        self._update_enabled()
+        job.deleteLater()
+        if job.error:
+            message = job.error
+            if job.paths:
+                message += "\n\n已写出的文件：\n" + "\n".join(str(p) for p in job.paths)
+            QMessageBox.critical(self, "导出未完成", message)
+            return
+        QMessageBox.information(
+            self, "导出完成", "已导出：\n" + "\n".join(str(p) for p in job.paths)
+            + f"\n\n标注图片 {job.image_count} 张。解压 ZIP 后打开 index.html 查看；"
+              "使用查看页的缩放按钮或滚轮，标点大小保持不变。PNG 可直接分享。",
+        )
 
     # ══ 杂项 ════════════════════════════════════════════════════════
     def _update_enabled(self) -> None:
-        available = not self._ai_busy
+        available = not self._ai_busy and not self._export_busy
         has_proj = self.project is not None and available
         has_case = self.ann is not None and available
         for a in (self.act_import, self.act_roster, self.act_csv, self.act_xlsx,
@@ -1336,11 +1403,11 @@ class MainWindow(QMainWindow):
         QMessageBox.about(self, "关于", ABOUT_TEXT)
 
     def dragEnterEvent(self, e):
-        if not self._ai_busy and e.mimeData().hasUrls() and self.project is not None:
+        if not self._ai_busy and not self._export_busy and e.mimeData().hasUrls() and self.project is not None:
             e.acceptProposedAction()
 
     def dropEvent(self, e):
-        if self.project is None or self._ai_busy:
+        if self.project is None or self._ai_busy or self._export_busy:
             return
         paths = [Path(u.toLocalFile()) for u in e.mimeData().urls() if u.isLocalFile()]
         if paths:
@@ -1355,6 +1422,10 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
 
     def closeEvent(self, e) -> None:
+        if self._export_busy:
+            self._set_hint("标注图片正在导出，请完成后再关闭软件。")
+            e.ignore()
+            return
         self._ai.stop()
         self.save_current(silent=True)
         s = QSettings(ORG, APP)
@@ -1375,7 +1446,7 @@ HELP_TEXT = """\
    两个操作均需主动点击；启动不打开上次项目、不运行模型。
    模型点有轮廓时按轮廓约束，贴线不等于解剖位置已准确。
    编辑 → 候选点贴合牙齿轮廓，可校正旧项目中未人工修改的候选。
-   也可按 T 手工画框；牙框在项目内保留便于继续编辑，导出只含当前标点。
+   也可按 T 手工画框；坐标表只含当前标点，标注图片同时展示牙框、轮廓和彩色点。
    重画会替换对应旧框；重叠多框需选择。Ctrl+Z 撤销框选，重开仍有效。
 5. 自动候选带「候」标记，直接拖动调整，或 Enter 放大复核。
    模型的图像左/右需要在放大窗口确认近中/远中；牙位号也可修改。
@@ -1384,6 +1455,13 @@ HELP_TEXT = """\
    自动标注不填写 CEJ下2mm；需要③④公式时请自行补标。
    放大窗口按「完成标定」应用修改，「取消」放弃本次修改。
 6. Ctrl+Enter 完成本例并自动跳到下一张
+
+【导出与升级】
+   导出 CSV 后，项目 exports 文件夹内有 summary.csv、sites.csv 和标注图片 ZIP。
+   ZIP 含 PNG 和交互查看页；解压后双击 index.html，缩放牙齿时点保持屏幕大小。
+   Excel / 单例 JSON 同样附带相应图片 ZIP。PNG 是普通静态图片。
+   更新安装保留原项目，使用「项目 → 打开已有／旧版项目」继续查看已完成病例。
+   不要重新导入原图或在已有项目目录新建项目。
 
 【计算】
    ① 直线法：‖AC−CEJ‖ ÷ ‖根尖−CEJ‖
@@ -1417,7 +1495,7 @@ HELP_TEXT = """\
 """
 
 ABOUT_TEXT = """\
-<b>全景片牙槽骨吸收测量标注软件</b><br><br>
+<b>牙槽骨吸收测量 1.4.0-preview</b><br><br>
 用于牙周炎研究的批量标注与测量。<br><br>
 ① 直线法：‖AC−CEJ‖ ÷ ‖根尖−CEJ‖<br>
 ② 投影法：(AC−CEJ)·(根尖−CEJ) / ‖根尖−CEJ‖²<br><br>
