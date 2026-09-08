@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$WorkerProject = '',
-    [string]$Version = '1.3.1-preview',
+    [string]$Version = '1.4.0-preview',
     [ValidateSet('All', 'Gui', 'Worker', 'Assemble', 'Installer')]
     [string]$Stage = 'All'
 )

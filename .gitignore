@@ -6,6 +6,8 @@ __pycache__/
 build/
 dist/
 reports/
+output/
+.playwright-cli/
 models/*
 !models/README.md
 *.onnx

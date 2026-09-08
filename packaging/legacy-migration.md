@@ -1,47 +1,16 @@
-# 旧手工 1.0 安全迁移
+# 更新安装与旧病例保留 — 2026-09-08
 
-统一版沿用 AI 安装的 AppId `{9D7D2163-EE63-4815-B2C1-37EE3B4E4B50}`，
-与旧手工 1.0 的 `{8F3C1A62-4D77-4A5E-9B21-7C0E5A9D3F14}` 不同。
-卸载旧 1.0 只使用旧注册项指向的官方 `unins000.exe`，不手工删注册表。
-本次用户随后明确授权“旧版的病例可以直接清理”，覆盖先前保留旧病例的要求；
-因此不制作病例备份，在新版完成安装验证后再清理经过精确校验的旧根目录。
+本轮用户明确要求所有已登记、已标注数据和图片原地保留，覆盖此前本机清理旧病例的授权。不得沿用旧清理流程，不执行旧卸载器，不删除、移动或重建任何用户项目。
 
-## 已审计的旧程序边界
+统一版沿用 AI AppId {9D7D2163-EE63-4815-B2C1-37EE3B4E4B50}，UsePreviousAppDir=yes 在已有自动版上复用安装目录；只安装主程序、使用说明、_internal、runtime、models、SOURCE、THIRD_PARTY 白名单程序资产。安装源不含 project.json、images、annotations、exports、config 或 runs。
+依据：[Inno安装目录复用](https://jrsoftware.org/ishelp/topic_setup_usepreviousappdir.htm)、[文件安装规则](https://jrsoftware.org/ishelp/topic_filessection.htm)。
 
-旧 `installer.iss` 只有从 `dist/牙槽骨吸收测量_文件夹版/*` 安装的程序文件，
-没有 `[UninstallDelete]` 或自定义卸载代码。原文件夹产物只含 `_internal` 和主 exe。
-因此正常卸载应移除已登记的程序文件、快捷方式和旧卸载注册，保留随后创建的用户项目。
-[Inno 的卸载规则](https://jrsoftware.org/ishelp/topic_uninstalldeletesection.htm) 将
-`[UninstallDelete]` 定义为安装文件之外的额外删除，本项目旧脚本没有这种额外删除。
+纯手工 1.0 使用不同 AppId {8F3C1A62-4D77-4A5E-9B21-7C0E5A9D3F14}。
+升级统一版覆盖同名桌面/开始菜单快捷入口，保留手工版程序和全部项目原位置，避免旧卸载器删除共享入口或误触项目。旧程序注册仍可能保留，这不是另外交付一份新版。安装器不终止用户正在运行的会话。安装前正常保存并关闭现有软件。
 
-本机旧安装根位于 `%LOCALAPPDATA%/Programs/牙槽骨吸收测量`：
+新版维持空白启动，通过“项目 → 打开已有／旧版项目”显式选择原项目。
+发现逻辑只查共享 QSettings 的 last_project、当前程序目录、两种 AppId 的安装位置及两个默认安装根，不递归扫描或搬迁病例；其他自选项目可以正常“打开项目”。项目及标注兼容旧结构，保留原 patient、四点、ROI、done 状态和图片路径。images/done/ 的物理归档也原地保留。
 
-- 程序：`_internal/`、`牙槽骨吸收测量_文件夹版.exe`、`unins000.dat`、`unins000.exe`。
-- 旧项目：`project.json`、`annotations/`、`config/`、`exports/`、`images/`、`runs/`，
-  以及任何不属于原始程序载荷的其他文件。
+新建只接受空目录。打开缺失、损坏或高版本 project.json 会报错，禁止生成空索引覆盖。单纯 Project.open 不创建目录或写盘；显式编辑保存才更新项目。工程测试见 tests/test_upgrade_preservation.py 和 tests/test_export_bundle_ui.py。
 
-`audit_legacy_installation.py` 输出本机精确文件清单与 SHA256，默认不执行卸载或删除。
-它检查旧 `unins000.dat` 的路径字符串作为辅助证据，并明确不声称完整解析二进制卸载格式。
-任何用户文件出现在日志路径搜索结果中、未知链接或载荷含项目数据，都必须先解释清楚。
-公开说明不包含病例文件名；完整清单仅保存在本机 reports 中。
-
-## 已授权的本机执行顺序
-
-1. 先完成新版构建、目录版健康及真实按钮验证。让现有窗口正常保存并关闭，确认没有从安装目录运行的进程。
-2. 重新记录静止的旧目录项目文件数、字节数与 SHA 清单。用户已允许清理旧病例，跳过备份。
-3. 运行旧 1.0 官方卸载器，记录退出码和日志，确认旧卸载注册和程序被正常移除。
-4. 静默原位升级 AI AppId 到 1.3，创建统一的桌面/开始菜单入口，检查安装资产与目录版 SHA 一致并完成健康验证。
-   先卸载旧 1.0、再装统一入口，避免旧卸载器事后删除同名新快捷方式。
-5. 验证待清理目录的规范绝对路径精确等于
-   `C:/Users/Lenovo/AppData/Local/Programs/牙槽骨吸收测量`，且绝不等于保留的
-   `C:/Users/Lenovo/AppData/Local/Programs/牙槽骨吸收测量AI`；检查祖先和全部子项无链接、CIM 无该路径运行进程。
-   记录实际剩余病例文件数量后，才用原生 PowerShell 删除这个已获授权的精确旧目录。
-6. 清理经列明的旧 dist 安装器、旧独立 exe 和旧文件夹程序产物。
-   保留唯一当前安装包及其 manifest、当前运行目录、源码、源工程 inputs/原始附件、模型和报告。
-
-删除构建目录前必须解析绝对路径，确认位于预期 dist/build 内且不是链接；使用原生
-PowerShell `Remove-Item -LiteralPath`，不拼接到 cmd。只有上面明确授权并验证过的旧安装根可整体删除，
-不得扩大到 Programs、AI 安装目录或源工程目录。
-`worker-build` 是可重建的中间载荷，当前 bundle 已组装且最终验收后可清除以避免重复分发。
-
-此迁移只处理已经审计的本机旧安装。普通安装器不会猜测另一台电脑的病例目录并执行卸载。
+标注图片包使用SVG线条 non-scaling-stroke 和标点反向缩放的HTML查看器，而不是声称普通PNG支持固定屏幕尺寸；参考 [SVG vector-effect](https://developer.mozilla.org/en-US/docs/Web/SVG/Reference/Attribute/vector-effect)。导出在同目录暂存全部坐标文件和图片ZIP，生成成功才发布；目标被Excel占用时回滚已替换文件，避免新图配旧坐标。如回滚也被其他程序阻止，则保留备份并明确报告恢复目录。
